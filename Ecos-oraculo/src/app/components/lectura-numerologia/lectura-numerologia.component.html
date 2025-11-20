@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dokument</title>
+  </head>
+  <body>
+    <!-- Google Tag Manager (noscript) -->
+    <div class="oracle-container">
+      <!-- Video de fondo -->
+      <video autoplay muted loop playsinline class="background-video">
+        <source src="/NUMEROLOGIA.mp4" type="video/mp4" />
+        Ihr Browser unterstützt keine HTML5-Videos.
+      </video>
+
+      <!-- Overlay opcional para mejorar legibilidad -->
+      <div class="video-overlay"></div>
+      <div class="content-with-navbar">
+        <div class="oracle-main">
+          <!-- Información del numerólogo -->
+          <div class="interpreter-info">
+            <div class="interpreter-avatar">
+              <img
+                class="mystical-orb-image"
+                src="/Maestra-3.webp"
+                alt="Meisterin Avatar"
+              />
+            </div>
+            <div class="interpreter-details">
+              <!-- Primera línea: nombre + icono + título juntos -->
+              <div class="name-title-row">
+                <h3>{{ numerologistInfo.name }}</h3>
+                <span class="separator-icon">»</span>
+                <p class="interpreter-title">
+                  Wächterin der Heiligen Zahlen
+                </p>
+              </div>
+              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <p class="interpreter-specialty">
+                {{ numerologistInfo.specialty }}
+              </p>
+            </div>
+            <button
+              class="close-chat-btn"
+              onclick="window.location.href='/'"
+              aria-label="Schließen"
+            >
+              <svg
+                class="close-icon"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+              >
+                <path
+                  d="M1 1L11 11M1 11L11 1"
+                  stroke="gray"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <!-- Área de conversación -->
+          <div class="chat-area">
+            <div
+              class="messages-container"
+              #scrollContainer
+              (scroll)="onScroll($event)"
+            >
+              <div
+                *ngFor="let message of messages"
+                class="message"
+                [class.user-message]="message.role === 'user'"
+                [class.interpreter-message]="message.role === 'numerologist'"
+                [class.blocked-message]="isMessageBlocked(message)"
+              >
+                <div class="message-avatar">
+                  <img
+                    *ngIf="message.role === 'user'"
+                    class="user-avatar-image"
+                    src="/Visitante.webp"
+                    alt="Benutzer Avatar"
+                  />
+                  <img
+                    *ngIf="message.role === 'numerologist'"
+                    class="interpreter-avatar-small"
+                    src="/Maestra-3.webp"
+                    alt="Meisterin Avatar"
+                  />
+                </div>
+
+                <div class="message-content">
+                  <div class="message-bubble">
+                    <!-- CONTENIDO ORIGINAL (se difumina si está bloqueado) -->
+                    <div [class.blurred-content]="isMessageBlocked(message)">
+                      <p [innerHTML]="formatMessage(message.message)"></p>
+                    </div>
+
+                    <!-- OVERLAY DE PAGO (solo aparece si está bloqueado) -->
+                    <div
+                      *ngIf="isMessageBlocked(message)"
+                      class="message-payment-overlay"
+                    >
+                      <div class="payment-prompt">
+                        <span class="lock-icon">🔒</span>
+                        <p><strong>Premium-Inhalt</strong></p>
+                        <p>
+                          Zahle 4 €, um diese numerologische Interpretation zu sehen und auf unbegrenzte Lesungen zuzugreifen
+                        </p>
+                        <button
+                          (click)="promptForPayment()"
+                          class="unlock-button"
+                        >
+                          💳 Für 4 € freischalten
+                        </button>
+                      </div>
+                    </div>
+
+                    <span class="message-time">{{
+                      getTimeString(message.timestamp)
+                    }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Indicador de escritura -->
+              <div
+                *ngIf="isTyping"
+                class="message interpreter-message typing-indicator"
+              >
+                <div class="message-avatar">
+                  <span class="interpreter-avatar-small">
+                    <img
+                      class="interpreter-avatar-small"
+                      src="/Maestra-3.webp"
+                      alt="Meisterin Avatar"
+                  /></span>
+                </div>
+                <div class="message-content">
+                  <div class="message-bubble typing">
+                    <div class="typing-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <p class="typing-text">
+                      Meisterin Sofia konsultiert die heiligen Zahlen...
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Área de entrada -->
+          <div class="input-area">
+            <div class="input-container">
+              <div class="text-input-wrapper">
+                <textarea
+                  class="message-input"
+                  [(ngModel)]="currentMessage"
+                  placeholder="Frage zur Numerologie..."
+                  rows="1"
+                  maxlength="1500"
+                  (keydown)="onKeyPress($event)"
+                  (input)="autoResize($event)"
+                  [disabled]="isLoading"
+                ></textarea>
+              </div>
+
+              <div class="action-buttons">
+                <button
+                  class="clear-button"
+                  (click)="clearConversation()"
+                  [disabled]="isLoading"
+                  matTooltip="Neue Konsultation"
+                >
+                  <i class="fas fa-redo"></i>
+                </button>
+                <button
+                  class="send-button"
+                  id="send-button"
+                  (click)="sendMessage()"
+                  [disabled]="isLoading || !currentMessage.trim()"
+                >
+                  <i class="fas fa-paper-plane"></i>
+                  <mat-spinner *ngIf="isLoading" diameter="24"></mat-spinner>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL DE PAGO -->
+      <div *ngIf="showPaymentModal" class="payment-modal-overlay">
+        <div class="payment-modal">
+          <div class="payment-header">
+            <h3>🔢 Schalte unbegrenzte numerologische Lesungen frei</h3>
+            <button (click)="cancelPayment()" class="close-payment-button">
+              ✕
+            </button>
+          </div>
+
+          <div class="payment-content">
+            <div class="payment-info">
+              <p>Erste kostenlose numerologische Konsultation abgeschlossen.</p>
+              <p>
+                Um die heiligen Zahlen unbegrenzt weiter zu erkunden:
+              </p>
+            </div>
+
+            <div class="payment-price">
+              <span class="price-amount">4.00€</span>
+              <span class="price-description"
+                >Vollständiger Zugang zu numerologischen Interpretationen</span
+              >
+            </div>
+
+            <div *ngIf="isProcessingPayment" class="payment-loading">
+              <div class="loading-spinner"></div>
+              <p>Zahlungssystem vorbereiten...</p>
+            </div>
+
+            <div
+              id="payment-element-container"
+              class="payment-element-container"
+              [hidden]="isProcessingPayment"
+            >
+              <!-- Stripe Payment Element se monta aquí -->
+            </div>
+
+            <div *ngIf="paymentError" class="payment-error">
+              <span>{{ paymentError }}</span>
+            </div>
+
+            <div class="payment-actions">
+              <button
+                (click)="handlePaymentSubmit()"
+                [disabled]="isProcessingPayment"
+                class="pay-button"
+              >
+                <span *ngIf="!isProcessingPayment">💳 Bezahlen und Fortfahren</span>
+                <span *ngIf="isProcessingPayment">Verarbeitung...</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <app-recolecta-datos
+        *ngIf="showDataModal"
+        (onDataSubmitted)="onUserDataSubmitted($event)"
+        (onModalClosed)="onDataModalClosed()"
+      >
+      </app-recolecta-datos>
+      <app-fortune-wheel
+        [isVisible]="showFortuneWheel"
+        [prizes]="numerologyPrizes"
+        (onPrizeWon)="onPrizeWon($event)"
+        (onWheelClosed)="onWheelClosed()"
+      >
+      </app-fortune-wheel>
+    </div>
+  </body>
+</html>

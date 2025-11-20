@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dokument</title>
+  </head>
+  <body>
+    <!-- Video de fondo -->
+    <video autoplay muted loop playsinline class="background-video">
+      <source src="/MAPA-VOCACIONAL.mp4" type="video/mp4" />
+      Ihr Browser unterstützt keine HTML5-Videos.
+    </video>
+
+    <!-- Overlay opcional para mejorar legibilidad -->
+    <div class="video-overlay"></div>
+    <div class="main-content">
+      <div class="vocational-container">
+        <!-- Header del consejero -->
+        <div class="counselor-header">
+          <div class="counselor-info">
+            <div class="interpreter-avatar">
+              <img
+                class="mystical-orb-image"
+                src="/Maestra-4.webp"
+                alt="Meisterin Avatar"
+              />
+            </div>
+            <div class="interpreter-details">
+              <!-- Primera línea: nombre + icono + título juntos -->
+              <div class="name-title-row">
+                <h3>{{ counselorInfo.name }}</h3>
+                <span class="separator-icon">»</span>
+                <p class="interpreter-title">{{ counselorInfo.title }}</p>
+              </div>
+              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <p class="interpreter-specialty">{{ counselorInfo.specialty }}</p>
+            </div>
+          </div>
+          <button
+            class="close-chat-btn"
+            onclick="window.location.href='/'"
+            aria-label="Schließen"
+          >
+            <svg class="close-icon" width="12" height="12" viewBox="0 0 12 12">
+              <path
+                d="M1 1L11 11M1 11L11 1"
+                stroke="gray"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Contenido de pestañas -->
+        <div class="tab-content">
+          <!-- TAB: CHAT -->
+          <div *ngIf="currentTab === 'chat'" class="chat-section">
+            <!-- Área de mensajes -->
+            <div
+              class="chat-messages"
+              #chatContainer
+              (scroll)="onScroll($event)"
+            >
+              <div
+                *ngFor="let message of chatMessages"
+                class="message"
+                [class.user-message]="message.isUser"
+                [class.counselor-message]="!message.isUser"
+                [class.blocked-message]="isMessageBlocked(message)"
+              >
+                <div class="message-avatar">
+                  <img
+                    *ngIf="message.isUser"
+                    class="user-avatar-image"
+                    src="/Visitante.webp"
+                    alt="Benutzer Avatar"
+                  />
+                  <img
+                    *ngIf="!message.isUser"
+                    class="interpreter-avatar-small"
+                    src="/Maestra-4.webp"
+                    alt="Meisterin Avatar"
+                  />
+                </div>
+
+                <div class="message-content">
+                  <!-- CONTENIDO ORIGINAL (se difumina si está bloqueado) -->
+                  <div [class.blurred-content]="isMessageBlocked(message)">
+                    <div class="message-text">
+                      <div [innerHTML]="formatMessage(message.content)"></div>
+                      <!-- HORA DENTRO DE LA BURBUJA DE TEXTO -->
+                      <div class="message-time-inside">
+                        {{ getTimeString(message.timestamp) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- OVERLAY DE PAGO (solo aparece si está bloqueado) -->
+                  <div
+                    *ngIf="isMessageBlocked(message)"
+                    class="message-payment-overlay"
+                  >
+                    <div class="payment-prompt">
+                      <span class="lock-icon">🔒</span>
+                      <p><strong>Premium-Inhalt</strong></p>
+                      <p>
+                        Zahle 4 €, um diese berufliche Orientierung zu sehen und
+                        auf unbegrenzte Beratungen zuzugreifen
+                      </p>
+                      <button
+                        (click)="promptForPayment()"
+                        class="unlock-button"
+                      >
+                        💳 Für 4 € freischalten
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Indicador de carga -->
+              <div *ngIf="isLoading" class="loading-message">
+                <div class="loading-avatar">
+                  <img
+                    class="interpreter-avatar-small"
+                    src="/Maestra-4.webp"
+                    alt="Meisterin Avatar"
+                  />
+                </div>
+                <div class="loading-content">
+                  <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <p class="loading-text">
+                    Dr. Valeria analysiert deine Anfrage...
+                  </p>
+                </div>
+              </div>
+            </div>
+            <!-- Área de entrada de mensajes -->
+            <div class="chat-input-area">
+              <div class="input-container">
+                <div class="text-input-wrapper">
+                  <textarea
+                    class="message-input"
+                    [(ngModel)]="currentMessage"
+                    (keydown)="onKeyPress($event)"
+                    (input)="autoResize($event)"
+                    placeholder="Schreibe deine berufliche Beratungsanfrage..."
+                    rows="1"
+                    maxlength="1500"
+                    [disabled]="isLoading"
+                  ></textarea>
+                </div>
+
+                <div class="action-buttons">
+                  <button
+                    class="clear-button"
+                    (click)="resetChat()"
+                    [disabled]="isLoading"
+                    title="Gespräch vollständig zurücksetzen"
+                  >
+                    <i class="fas fa-redo"></i>
+                  </button>
+                  <button
+                    class="send-button"
+                    id="send-button"
+                    (click)="sendMessage()"
+                    [disabled]="isLoading || !currentMessage.trim()"
+                  >
+                    <i class="fas fa-paper-plane"></i>
+                    <mat-spinner *ngIf="isLoading" diameter="20"></mat-spinner>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MODAL DE PAGO -->
+          <div *ngIf="showPaymentModal" class="payment-modal-overlay">
+            <div class="payment-modal">
+              <div class="payment-header">
+                <h3>🎯 Schalte unbegrenzte berufliche Orientierung frei</h3>
+                <button (click)="cancelPayment()" class="close-payment-button">
+                  ✕
+                </button>
+              </div>
+
+              <div class="payment-content">
+                <div class="payment-info">
+                  <p>Erste kostenlose berufliche Beratung abgeschlossen.</p>
+                  <p>
+                    Um deinen beruflichen Weg unbegrenzt weiter zu erkunden:
+                  </p>
+                </div>
+
+                <div class="payment-price">
+                  <span class="price-amount">5.00€</span>
+                  <span class="price-description"
+                    >Vollständiger Zugang zur beruflichen Orientierung</span
+                  >
+                </div>
+
+                <div *ngIf="isProcessingPayment" class="payment-loading">
+                  <div class="loading-spinner"></div>
+                  <p>Weiterleitung zu PayPal...</p>
+                </div>
+
+                <div class="paypal-info" *ngIf="!isProcessingPayment">
+                  <p>Sie werden zu PayPal weitergeleitet, um Ihre Zahlung sicher abzuschließen.</p>
+                  <p>Nach der Zahlung kehren Sie automatisch hierher zurück.</p>
+                </div>
+
+                <div *ngIf="paymentError" class="payment-error">
+                  <span>{{ paymentError }}</span>
+                </div>
+
+                <div class="payment-actions">
+                  <button
+                    (click)="handlePaymentSubmit()"
+                    [disabled]="isProcessingPayment"
+                    class="pay-button"
+                  >
+                    <span *ngIf="!isProcessingPayment"
+                      >💳 Mit PayPal bezahlen</span
+                    >
+                    <span *ngIf="isProcessingPayment">Verarbeitung...</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <app-recolecta-datos
+        *ngIf="showDataModal"
+        (onDataSubmitted)="onUserDataSubmitted($event)"
+        (onModalClosed)="onDataModalClosed()"
+      >
+      </app-recolecta-datos>
+      <app-fortune-wheel
+        [isVisible]="showFortuneWheel"
+        [prizes]="vocationalPrizes"
+        (onPrizeWon)="onPrizeWon($event)"
+        (onWheelClosed)="onWheelClosed()"
+      >
+      </app-fortune-wheel>
+    </div>
+  </body>
+</html>
