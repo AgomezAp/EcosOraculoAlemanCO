@@ -567,7 +567,7 @@ Welchen Aspekt deiner Geburtsdiagramm möchtest du zuerst erkunden?`,
 
     try {
       await this.paypalService.initiatePayment({
-        amount: '5.00',
+        amount: '4.00',
         currency: 'EUR',
         serviceName: 'Geburtstabelle',
         returnPath: '/geburtstabelle',

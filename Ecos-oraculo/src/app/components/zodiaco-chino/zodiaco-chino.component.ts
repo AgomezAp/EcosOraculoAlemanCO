@@ -431,7 +431,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     try {
       // Iniciar el flujo de pago de PayPal (redirige al usuario)
       await this.paypalService.initiatePayment({
-        amount: '5.00',
+        amount: '4.00',
         currency: 'EUR',
         serviceName: 'Chinesisches Horoskop',
         returnPath: '/horoskop',
