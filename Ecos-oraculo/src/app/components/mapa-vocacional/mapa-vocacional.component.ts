@@ -723,7 +723,7 @@ export class MapaVocacionalComponent
       // Configurar datos de la orden con rutas específicas del servicio
       const orderData = {
         amount: '4.00',
-        currency: 'USD',
+        currency: 'EUR',
         serviceName: 'Berufskarte',
         returnPath: '/berufskarte',  // ✅ Ruta correcta en alemán
         cancelPath: '/berufskarte'   // ✅ Ruta si cancela el pago

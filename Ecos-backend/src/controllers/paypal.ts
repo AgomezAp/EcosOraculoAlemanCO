@@ -58,8 +58,8 @@ export const createOrder = async (req: Request, res: Response): Promise<Response
   try {
     // Recibir información del servicio que solicita el pago
     const { 
-      amount = "7.00", 
-      currency = "USD",
+      amount = "4.00", 
+      currency = "EUR",
       serviceName = "Ecos del Oráculo",
       returnPath = "/payment-success",  // Ruta específica del servicio
       cancelPath = "/payment-cancelled" // Ruta de cancelación del servicio
@@ -78,7 +78,7 @@ export const createOrder = async (req: Request, res: Response): Promise<Response
       ],
       application_context: {
         brand_name: "Ecos del Oráculo",
-        landing_page: "NO_PREFERENCE",
+        landing_page: "GUEST_CHECKOUT", 
         shipping_preference: "NO_SHIPPING",
         user_action: "PAY_NOW",
         return_url: `${BACKEND_URL}/api/paypal/capture-order?service=${encodeURIComponent(returnPath)}`,
