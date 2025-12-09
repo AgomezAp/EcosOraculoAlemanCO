@@ -28,10 +28,13 @@ export class ChineseZodiacController {
   private genAI: GoogleGenerativeAI;
 
   // ✅ LISTA DE MODELOS DE RESPALDO (en orden de preferencia)
-  private readonly MODELS_FALLBACK = [
-    "gemini-2.0-flash-exp",
+ private readonly MODELS_FALLBACK = [
     "gemini-2.5-flash",
+    "gemini-2.5-flash-preview-09-2025",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
   ];
 
   constructor() {
