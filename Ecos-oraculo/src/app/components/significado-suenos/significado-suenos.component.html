@@ -7,18 +7,18 @@
   </head>
   <body>
     <div class="oracle-container">
-      <!-- Video de fondo -->
+      <!-- Hintergrundvideo -->
       <video autoplay muted loop playsinline class="background-video">
         <source src="/SUENOS.mp4" type="video/mp4" />
         Dein Browser unterstützt keine HTML5-Videos.
       </video>
 
-      <!-- Overlay opcional para mejorar legibilidad -->
+      <!-- Optionales Overlay zur Verbesserung der Lesbarkeit -->
       <div class="video-overlay"></div>
 
       <div class="content-with-navbar">
         <div class="oracle-main">
-          <!-- Información del intérprete -->
+          <!-- Informationen des Interpreten -->
           <div class="interpreter-info">
             <div class="interpreter-avatar">
               <img
@@ -28,13 +28,13 @@
               />
             </div>
             <div class="interpreter-details">
-              <!-- Primera línea: nombre + icono + título juntos -->
+              <!-- Erste Zeile: Name + Symbol + Titel zusammen -->
               <div class="name-title-row">
                 <h3>{{ interpreterData.name }}</h3>
                 <span class="separator-icon">»</span>
                 <p class="interpreter-title">Wächter der Träume</p>
               </div>
-              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <!-- Zweite Zeile: Fachgebiet darunter IN GROSSBUCHSTABEN -->
               <p class="interpreter-specialty">
                 {{ interpreterData.specialty }}
               </p>
@@ -60,7 +60,7 @@
             </button>
           </div>
 
-          <!-- Área de conversación -->
+          <!-- Chatbereich -->
           <div class="chat-area">
             <div
               class="messages-container"
@@ -91,12 +91,12 @@
 
                 <div class="message-content">
                   <div class="message-bubble">
-                    <!-- CONTENIDO ORIGINAL (se difumina si está bloqueado) -->
+                    <!-- ORIGINALINHALT (wird unscharf, wenn gesperrt) -->
                     <div [class.blurred-content]="isMessageBlocked(message)">
                       <p [innerHTML]="formatMessage(message.message)"></p>
                     </div>
 
-                    <!-- OVERLAY DE PAGO (solo aparece si está bloqueado) -->
+                    <!-- ZAHLUNGS-OVERLAY (erscheint nur wenn gesperrt) -->
                     <div
                       *ngIf="isMessageBlocked(message)"
                       class="message-payment-overlay"
@@ -124,7 +124,7 @@
                 </div>
               </div>
 
-              <!-- Indicador de escritura (SIN CAMBIOS) -->
+              <!-- Schreibanzeige -->
               <div
                 *ngIf="isTyping"
                 class="message interpreter-message typing-indicator"
@@ -152,6 +152,8 @@
               </div>
             </div>
           </div>
+
+          <!-- Eingabebereich -->
           <div class="input-area">
             <div class="input-container">
               <div class="text-input-wrapper">
@@ -197,6 +199,7 @@
           </div>
         </div>
       </div>
+
       <app-recolecta-datos
         *ngIf="showDataModal"
         (onDataSubmitted)="onUserDataSubmitted($event)"
@@ -204,6 +207,7 @@
       >
       </app-recolecta-datos>
 
+      <!-- ZAHLUNGS-MODAL -->
       <div *ngIf="showPaymentModal" class="payment-modal-overlay">
         <div class="payment-modal">
           <div class="payment-header">
@@ -220,7 +224,7 @@
             </div>
 
             <div class="payment-price">
-              <span class="price-amount">4.00€</span>
+              <span class="price-amount">4,00€</span>
               <span class="price-description"
                 >Vollständiger Zugang zu Interpretationen</span
               >
@@ -228,16 +232,16 @@
 
             <div *ngIf="isProcessingPayment" class="payment-loading">
               <div class="loading-spinner"></div>
-              <p>Zahlungssystem vorbereiten...</p>
+              <p>Zahlungssystem wird vorbereitet...</p>
             </div>
 
-            <!-- ✅ CAMBIO CRÍTICO: Usar [hidden] en lugar de *ngIf -->
+            <!-- WICHTIGE ÄNDERUNG: [hidden] statt *ngIf verwenden -->
             <div
               id="payment-element-container"
               class="payment-element-container"
               [hidden]="isProcessingPayment"
             >
-              <!-- Stripe Payment Element se monta aquí -->
+              <!-- Stripe Payment Element wird hier eingebunden -->
             </div>
 
             <div *ngIf="paymentError" class="payment-error">
@@ -253,19 +257,12 @@
                 <span *ngIf="!isProcessingPayment"
                   >💳 Bezahlen und Fortfahren</span
                 >
-                <span *ngIf="isProcessingPayment">Verarbeiten...</span>
+                <span *ngIf="isProcessingPayment">Wird verarbeitet...</span>
               </button>
             </div>
           </div>
         </div>
       </div>
-      <app-fortune-wheel
-        [isVisible]="showFortuneWheel"
-        [prizes]="wheelPrizes"
-        (onPrizeWon)="onPrizeWon($event)"
-        (onWheelClosed)="onWheelClosed()"
-      >
-      </app-fortune-wheel>
     </div>
   </body>
 </html>

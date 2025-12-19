@@ -13,13 +13,13 @@
       Dein Browser unterstützt keine HTML5-Videos.
     </video>
 
-    <!-- Overlay opcional para mejorar legibilidad -->
+    <!-- Optionales Overlay für bessere Lesbarkeit -->
     <div class="video-overlay"></div>
 
     <div class="oracle-container">
       <div class="content-with-navbar">
         <div class="oracle-main">
-          <!-- ===== INFORMACIÓN DEL GUÍA ===== -->
+          <!-- ===== INFORMATION DER FÜHRERIN ===== -->
           <div class="interpreter-info">
             <div class="interpreter-avatar">
               <img
@@ -29,13 +29,13 @@
               />
             </div>
             <div class="interpreter-details">
-              <!-- Primera línea: nombre + icono + título juntos -->
+              <!-- Erste Zeile: Name + Symbol + Titel zusammen -->
               <div class="name-title-row">
-                <h3>Schamane Kiara</h3>
+                <h3>Schamanin Kiara</h3>
                 <span class="separator-icon">»</span>
                 <p class="interpreter-title">Führerin der Inneren Tiere</p>
               </div>
-              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <!-- Zweite Zeile: Spezialität darunter IN GROSSBUCHSTABEN -->
               <p class="interpreter-specialty">
                 SPEZIALISTIN FÜR SPIRITUELLE VERBINDUNG MIT DEM TIERREICH
               </p>
@@ -61,7 +61,7 @@
             </button>
           </div>
 
-          <!-- ===== ÁREA DE CHAT ===== -->
+          <!-- ===== CHAT-BEREICH ===== -->
           <div class="chat-area">
             <div
               class="messages-container"
@@ -70,7 +70,7 @@
               (mousedown)="onUserStartScroll()"
               (wheel)="onUserStartScroll()"
             >
-              <!-- Mensajes normales -->
+              <!-- Normale Nachrichten -->
               <div
                 *ngFor="let message of chatMessages"
                 class="message"
@@ -112,7 +112,7 @@
                   </div>
                 </div>
 
-                <!-- Overlay de pago para mensajes bloqueados -->
+                <!-- Zahlungs-Overlay für blockierte Nachrichten -->
                 <div
                   *ngIf="isMessageBlocked(message)"
                   class="message-payment-overlay"
@@ -125,13 +125,13 @@
                       Führerin frei
                     </p>
                     <button class="unlock-button" (click)="promptForPayment()">
-                      Für  4,00€ freischalten
+                      Für 4,00€ freischalten
                     </button>
                   </div>
                 </div>
               </div>
 
-              <!-- Indicador de carga -->
+              <!-- Ladeindikator -->
               <div *ngIf="isLoading" class="message typing-indicator">
                 <div class="message-avatar interpreter-avatar-small">
                   <img
@@ -148,14 +148,14 @@
                       <span></span>
                     </div>
                     <p class="typing-text">
-                      Schamane Kiara analysiert deine Anfrage...
+                      Schamanin Kiara analysiert deine Anfrage...
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- ===== ÁREA DE ENTRADA ===== -->
+            <!-- ===== EINGABEBEREICH ===== -->
           </div>
           <div class="input-area">
             <div class="input-container">
@@ -202,7 +202,7 @@
       </app-recolecta-datos>
     </div>
 
-    <!-- ===== MODAL DE PAGO ===== -->
+    <!-- ===== ZAHLUNGSMODAL ===== -->
     <div *ngIf="showPaymentModal" class="payment-modal-overlay">
       <div class="payment-modal">
         <div class="payment-header">
@@ -214,7 +214,7 @@
 
         <div class="payment-content">
           <div class="payment-info">
-            <p>Greife auf unbegrenzte Beratungen mit Schamane Kiara zu</p>
+            <p>Erhalte unbegrenzten Zugang zu Beratungen mit Schamanin Kiara</p>
             <p>Entdecke die tiefen Geheimnisse deines inneren Tieres</p>
           </div>
 
@@ -235,20 +235,15 @@
               (click)="handlePaymentSubmit()"
               [disabled]="isProcessingPayment"
             >
-              {{ isProcessingPayment ? "Verarbeitung..." : "4,00€ bezahlen" }}
+              {{
+                isProcessingPayment ? "Wird verarbeitet..." : "4,00€ bezahlen"
+              }}
             </button>
           </div>
         </div>
       </div>
     </div>
-    <app-fortune-wheel
-      [isVisible]="showFortuneWheel"
-      [prizes]="animalPrizes"
-      (onPrizeWon)="onPrizeWon($event)"
-      (onWheelClosed)="onWheelClosed()"
-    >
-    </app-fortune-wheel>
   </body>
 </html>
 
-<!-- Video de fondo -->
+<!-- Hintergrundvideo -->

@@ -6,17 +6,17 @@
     <title>Dokument</title>
   </head>
   <body>
-    <!-- Video de fondo -->
+    <!-- Hintergrundvideo -->
     <video autoplay muted loop playsinline class="background-video">
       <source src="/MAPA-VOCACIONAL.mp4" type="video/mp4" />
-      Ihr Browser unterstützt keine HTML5-Videos.
+      Dein Browser unterstützt keine HTML5-Videos.
     </video>
 
-    <!-- Overlay opcional para mejorar legibilidad -->
+    <!-- Optionales Overlay zur Verbesserung der Lesbarkeit -->
     <div class="video-overlay"></div>
     <div class="main-content">
       <div class="vocational-container">
-        <!-- Header del consejero -->
+        <!-- Header des Beraters -->
         <div class="counselor-header">
           <div class="counselor-info">
             <div class="interpreter-avatar">
@@ -27,13 +27,13 @@
               />
             </div>
             <div class="interpreter-details">
-              <!-- Primera línea: nombre + icono + título juntos -->
+              <!-- Erste Zeile: Name + Symbol + Titel zusammen -->
               <div class="name-title-row">
                 <h3>{{ counselorInfo.name }}</h3>
                 <span class="separator-icon">»</span>
                 <p class="interpreter-title">{{ counselorInfo.title }}</p>
               </div>
-              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <!-- Zweite Zeile: Fachgebiet darunter IN GROSSBUCHSTABEN -->
               <p class="interpreter-specialty">{{ counselorInfo.specialty }}</p>
             </div>
           </div>
@@ -53,11 +53,11 @@
           </button>
         </div>
 
-        <!-- Contenido de pestañas -->
+        <!-- Tab-Inhalt -->
         <div class="tab-content">
           <!-- TAB: CHAT -->
           <div *ngIf="currentTab === 'chat'" class="chat-section">
-            <!-- Área de mensajes -->
+            <!-- Nachrichtenbereich -->
             <div
               class="chat-messages"
               #chatContainer
@@ -86,18 +86,18 @@
                 </div>
 
                 <div class="message-content">
-                  <!-- CONTENIDO ORIGINAL (se difumina si está bloqueado) -->
+                  <!-- ORIGINALINHALT (wird unscharf, wenn gesperrt) -->
                   <div [class.blurred-content]="isMessageBlocked(message)">
                     <div class="message-text">
                       <div [innerHTML]="formatMessage(message.content)"></div>
-                      <!-- HORA DENTRO DE LA BURBUJA DE TEXTO -->
+                      <!-- UHRZEIT INNERHALB DER TEXTBLASE -->
                       <div class="message-time-inside">
                         {{ getTimeString(message.timestamp) }}
                       </div>
                     </div>
                   </div>
 
-                  <!-- OVERLAY DE PAGO (solo aparece si está bloqueado) -->
+                  <!-- ZAHLUNGS-OVERLAY (erscheint nur wenn gesperrt) -->
                   <div
                     *ngIf="isMessageBlocked(message)"
                     class="message-payment-overlay"
@@ -106,21 +106,21 @@
                       <span class="lock-icon">🔒</span>
                       <p><strong>Premium-Inhalt</strong></p>
                       <p>
-                        Zahle 4 €, um diese berufliche Orientierung zu sehen und
-                        auf unbegrenzte Beratungen zuzugreifen
+                        Zahle 4,00€ um diese Berufsberatung zu sehen und
+                        unbegrenzten Zugang zu Beratungen zu erhalten
                       </p>
                       <button
                         (click)="promptForPayment()"
                         class="unlock-button"
                       >
-                        💳 Für 4 € freischalten
+                        💳 Für 4,00€ freischalten
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Indicador de carga -->
+              <!-- Ladeanzeige -->
               <div *ngIf="isLoading" class="loading-message">
                 <div class="loading-avatar">
                   <img
@@ -141,7 +141,7 @@
                 </div>
               </div>
             </div>
-            <!-- Área de entrada de mensajes -->
+            <!-- Nachrichteneingabebereich -->
             <div class="chat-input-area">
               <div class="input-container">
                 <div class="text-input-wrapper">
@@ -150,7 +150,7 @@
                     [(ngModel)]="currentMessage"
                     (keydown)="onKeyPress($event)"
                     (input)="autoResize($event)"
-                    placeholder="Schreibe deine berufliche Beratungsanfrage..."
+                    placeholder="Schreibe deine Berufsberatungsanfrage..."
                     rows="1"
                     maxlength="1500"
                     [disabled]="isLoading"
@@ -162,7 +162,7 @@
                     class="clear-button"
                     (click)="resetChat()"
                     [disabled]="isLoading"
-                    title="Gespräch vollständig zurücksetzen"
+                    title="Gesamte Konversation zurücksetzen"
                   >
                     <i class="fas fa-redo"></i>
                   </button>
@@ -180,11 +180,11 @@
             </div>
           </div>
 
-          <!-- MODAL DE PAGO -->
+          <!-- ZAHLUNGS-MODAL -->
           <div *ngIf="showPaymentModal" class="payment-modal-overlay">
             <div class="payment-modal">
               <div class="payment-header">
-                <h3>🎯 Schalte unbegrenzte berufliche Orientierung frei</h3>
+                <h3>🎯 Schalte unbegrenzte Berufsberatung frei</h3>
                 <button (click)="cancelPayment()" class="close-payment-button">
                   ✕
                 </button>
@@ -192,27 +192,30 @@
 
               <div class="payment-content">
                 <div class="payment-info">
-                  <p>Erste kostenlose berufliche Beratung abgeschlossen.</p>
+                  <p>Erste kostenlose Berufsberatung abgeschlossen.</p>
                   <p>
                     Um deinen beruflichen Weg unbegrenzt weiter zu erkunden:
                   </p>
                 </div>
 
                 <div class="payment-price">
-                  <span class="price-amount">5.00€</span>
+                  <span class="price-amount">4,00€</span>
                   <span class="price-description"
-                    >Vollständiger Zugang zur beruflichen Orientierung</span
+                    >Vollständiger Zugang zur Berufsberatung</span
                   >
                 </div>
 
                 <div *ngIf="isProcessingPayment" class="payment-loading">
                   <div class="loading-spinner"></div>
-                  <p>Weiterleitung zu PayPal...</p>
+                  <p>Zahlungssystem wird vorbereitet...</p>
                 </div>
 
-                <div class="paypal-info" *ngIf="!isProcessingPayment">
-                  <p>Sie werden zu PayPal weitergeleitet, um Ihre Zahlung sicher abzuschließen.</p>
-                  <p>Nach der Zahlung kehren Sie automatisch hierher zurück.</p>
+                <div
+                  id="payment-element-container"
+                  class="payment-element-container"
+                  [hidden]="isProcessingPayment"
+                >
+                  <!-- Stripe Payment Element wird hier eingebunden -->
                 </div>
 
                 <div *ngIf="paymentError" class="payment-error">
@@ -226,9 +229,9 @@
                     class="pay-button"
                   >
                     <span *ngIf="!isProcessingPayment"
-                      >💳 Mit PayPal bezahlen</span
+                      >💳 Bezahlen und fortfahren</span
                     >
-                    <span *ngIf="isProcessingPayment">Verarbeitung...</span>
+                    <span *ngIf="isProcessingPayment">Wird verarbeitet...</span>
                   </button>
                 </div>
               </div>
@@ -242,13 +245,6 @@
         (onModalClosed)="onDataModalClosed()"
       >
       </app-recolecta-datos>
-      <app-fortune-wheel
-        [isVisible]="showFortuneWheel"
-        [prizes]="vocationalPrizes"
-        (onPrizeWon)="onPrizeWon($event)"
-        (onWheelClosed)="onWheelClosed()"
-      >
-      </app-fortune-wheel>
     </div>
   </body>
 </html>

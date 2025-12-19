@@ -56,7 +56,7 @@ const createOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     var _a, _b;
     try {
         // Recibir información del servicio que solicita el pago
-        const { amount = "5.00", currency = "USD", serviceName = "Ecos del Oráculo", returnPath = "/payment-success", // Ruta específica del servicio
+        const { amount = "4.00", currency = "EUR", serviceName = "Ecos del Oráculo", returnPath = "/payment-success", // Ruta específica del servicio
         cancelPath = "/payment-cancelled" // Ruta de cancelación del servicio
          } = req.body;
         const order = {
@@ -72,7 +72,7 @@ const createOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             ],
             application_context: {
                 brand_name: "Ecos del Oráculo",
-                landing_page: "NO_PREFERENCE",
+                landing_page: "GUEST_CHECKOUT",
                 shipping_preference: "NO_SHIPPING",
                 user_action: "PAY_NOW",
                 return_url: `${BACKEND_URL}/api/paypal/capture-order?service=${encodeURIComponent(returnPath)}`,

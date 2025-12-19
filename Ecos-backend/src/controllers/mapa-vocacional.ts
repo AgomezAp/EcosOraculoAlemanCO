@@ -30,6 +30,8 @@ interface VocationalRequest {
     role: "user" | "counselor";
     message: string;
   }>;
+  messageCount?: number;
+  isPremiumUser?: boolean;
 }
 
 interface VocationalResponse {
@@ -38,6 +40,10 @@ interface VocationalResponse {
   error?: string;
   code?: string;
   timestamp?: string;
+  freeMessagesRemaining?: number;
+  showPaywall?: boolean;
+  paywallMessage?: string;
+  isCompleteResponse?: boolean;
 }
 
 interface ApiError extends Error {
@@ -48,10 +54,9 @@ interface ApiError extends Error {
 export class VocationalController {
   private genAI: GoogleGenerativeAI;
 
-  // ✅ LISTE DER AUSWECHSELMODELLE (nach Präferenz)
- private readonly MODELS_FALLBACK = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-preview-09-2025",
+  private readonly FREE_MESSAGES_LIMIT = 3;
+
+  private readonly MODELS_FALLBACK = [
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.0-flash",
@@ -60,47 +65,141 @@ export class VocationalController {
 
   constructor() {
     if (!process.env.GEMINI_API_KEY) {
-      // Diese Meldung ist für Administrator/Deploy sichtbar — enthält Schlüsselbegriff in Klammern für Kompatibilität
       throw new Error(
-        "GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert (GEMINI_API_KEY is not configured in environment variables)"
+        "GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert"
       );
     }
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
 
-  // Método principal para chat con consejero vocacional
+  private hasFullAccess(messageCount: number, isPremiumUser: boolean): boolean {
+    return isPremiumUser || messageCount <= this.FREE_MESSAGES_LIMIT;
+  }
+
+  // ✅ HOOK-NACHRICHT AUF DEUTSCH
+  private generateVocationalHookMessage(): string {
+    return `
+
+🎯 **Warte! Dein Berufsprofil ist fast vollständig...**
+
+Basierend auf unserem Gespräch habe ich sehr klare Muster über deine Berufung erkannt, aber um dir zu enthüllen:
+- 🎓 Die **3 idealen Studiengänge/Berufe**, die perfekt zu deinem Profil passen
+- 💼 Das **Berufsfeld mit der größten Zukunft** für deine Fähigkeiten
+- 📈 Den **personalisierten Aktionsplan** Schritt für Schritt für deinen Erfolg
+- 🔑 Die **Schlüsselkompetenzen**, die du entwickeln solltest, um hervorzustechen
+- 💰 Die **erwartete Gehaltsspanne** in den empfohlenen Berufen
+
+**Schalte jetzt deine vollständige Berufsberatung frei** und entdecke den Karriereweg, der deine Zukunft verändern wird.
+
+✨ *Tausende Menschen haben bereits ihre ideale Berufung mit unserer Beratung gefunden...*`;
+  }
+
+  // ✅ TEILANTWORT ERSTELLEN (TEASER)
+  private createVocationalPartialResponse(fullText: string): string {
+    const sentences = fullText
+      .split(/[.!?]+/)
+      .filter((s) => s.trim().length > 0);
+    const teaserSentences = sentences.slice(0, Math.min(3, sentences.length));
+    let teaser = teaserSentences.join(". ").trim();
+
+    if (
+      !teaser.endsWith(".") &&
+      !teaser.endsWith("!") &&
+      !teaser.endsWith("?")
+    ) {
+      teaser += "...";
+    }
+
+    const hook = this.generateVocationalHookMessage();
+
+    return teaser + hook;
+  }
+
+  // Hauptmethode für Chat mit Berufsberater
   public chatWithCounselor = async (
     req: Request,
     res: Response
   ): Promise<void> => {
     try {
-      const { vocationalData, userMessage }: VocationalRequest = req.body;
+      const {
+        vocationalData,
+        userMessage,
+        conversationHistory,
+        messageCount = 1,
+        isPremiumUser = false,
+      }: VocationalRequest = req.body;
 
-      // Validar entrada
       this.validateVocationalRequest(vocationalData, userMessage);
 
-      const contextPrompt = this.createVocationalContext(
-        req.body.conversationHistory
+      const shouldGiveFullResponse = this.hasFullAccess(
+        messageCount,
+        isPremiumUser
       );
+      const freeMessagesRemaining = Math.max(
+        0,
+        this.FREE_MESSAGES_LIMIT - messageCount
+      );
+
+      // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+      const isFirstMessage =
+        !conversationHistory || conversationHistory.length === 0;
+
+      console.log(
+        `📊 Berufsberatung - Nachrichtenanzahl: ${messageCount}, Premium: ${isPremiumUser}, Vollständige Antwort: ${shouldGiveFullResponse}, Erste Nachricht: ${isFirstMessage}`
+      );
+
+      const contextPrompt = this.createVocationalContext(
+        conversationHistory,
+        shouldGiveFullResponse
+      );
+
+      const responseInstructions = shouldGiveFullResponse
+        ? `1. Du MUSST eine VOLLSTÄNDIGE Antwort mit 250-400 Wörtern generieren
+2. Füge eine VOLLSTÄNDIGE Analyse des Berufsprofils ein
+3. Schlage spezifische Berufe/Studiengänge mit Begründung vor
+4. Liefere konkrete Handlungsschritte
+5. Biete praktische und detaillierte Orientierung`
+        : `1. Du MUSST eine TEILWEISE Antwort mit 100-180 Wörtern generieren
+2. DEUTE AN, dass du klare berufliche Muster erkannt hast
+3. Erwähne, dass du spezifische Empfehlungen hast, aber enthülle sie NICHT vollständig
+4. Erzeuge INTERESSE und NEUGIER über die idealen Berufe
+5. Nutze Phrasen wie "Ich sehe ein interessantes Muster in deinem Profil...", "Deine Antworten zeigen Fähigkeiten, die perfekt passen zu...", "Ich erkenne eine klare Neigung zu..."
+6. Schließe die Berufsempfehlungen NIEMALS ab, lass sie in der Schwebe`;
+
+      // ✅ SPEZIFISCHE ANWEISUNG ZU BEGRÜSSUNGEN
+      const greetingInstruction = isFirstMessage
+        ? "Du kannst eine kurze Begrüßung am Anfang einfügen."
+        : "⚠️ KRITISCH: NICHT GRÜSSEN. Das ist ein laufendes Gespräch. Geh DIREKT zum Inhalt ohne jegliche Begrüßung, Willkommen oder Vorstellung.";
 
       const fullPrompt = `${contextPrompt}
 
-⚠️ WICHTIGE ANWEISUNGEN (KRITISCH/MUSS BEACHTET WERDEN):
-1. Du MUSST eine VOLLSTÄNDIGE Antwort zwischen 150-350 Wörtern erzeugen.
-2. Verlasse niemals eine Antwort halb fertig.
-3. Wenn du erwähnst, dass du Karrieren oder Optionen vorschlägst, MUSST du es abschließen.
-4. Jede Antwort MUSS mit einer klaren Schlussfolgerung enden.
-5. Wenn du merkst, dass deine Antwort abgeschnitten wird, beende die aktuelle Idee kohärent.
-6. BEWAHRE den professionellen, empathischen Ton.
-7. Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal.
+⚠️ WICHTIGE PFLICHTANWEISUNGEN:
+${responseInstructions}
+- Lass eine Antwort NIEMALS halb fertig oder unvollständig gemäß dem Antworttyp
+- Wenn du erwähnst, dass du Berufe vorschlagen wirst, ${
+        shouldGiveFullResponse
+          ? "MUSST du es mit Details abschließen"
+          : "erzeuge Erwartung ohne sie zu enthüllen"
+      }
+- Behalte IMMER den professionellen und empathischen Ton bei
+- Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal
 
-Benutzer: "${userMessage}"
+🚨 BEGRÜSSUNGSANWEISUNG: ${greetingInstruction}
 
-Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`;
+Nutzer: "${userMessage}"
 
-      console.log(`Generiere Berufsorientierung...`);
+Antwort der Berufsberaterin (AUF DEUTSCH, ${
+        isFirstMessage
+          ? "du kannst kurz grüßen"
+          : "OHNE GRUSS - geh direkt zum Inhalt"
+      }):`;
 
-      // ✅ SISTEMA DE FALLBACK: Intentar con múltiples modelos
+      console.log(
+        `Erstelle Berufsberatung (${
+          shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"
+        })...`
+      );
+
       let text = "";
       let usedModel = "";
       let allModelErrors: string[] = [];
@@ -115,7 +214,7 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
               temperature: 0.85,
               topK: 50,
               topP: 0.92,
-              maxOutputTokens: 512,
+              maxOutputTokens: shouldGiveFullResponse ? 600 : 300,
               candidateCount: 1,
               stopSequences: [],
             },
@@ -139,7 +238,6 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
             ],
           });
 
-          // ✅ REINTENTOS para cada modelo (por si está temporalmente sobrecargado)
           let attempts = 0;
           const maxAttempts = 3;
           let modelSucceeded = false;
@@ -155,17 +253,17 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
               const response = result.response;
               text = response.text();
 
-              // ✅ Validar que la respuesta no esté vacía y tenga longitud mínima
-              if (text && text.trim().length >= 80) {
+              const minLength = shouldGiveFullResponse ? 80 : 50;
+              if (text && text.trim().length >= minLength) {
                 console.log(
-                  `  ✅ Erfolg mit ${modelName} nach Versuch ${attempts}`
+                  `  ✅ Erfolg mit ${modelName} bei Versuch ${attempts}`
                 );
                 usedModel = modelName;
                 modelSucceeded = true;
-                break; // Salir del while de reintentos
+                break;
               }
 
-              console.warn(`  ⚠️ Antwort zu kurz, erneut versuchen...`);
+              console.warn(`  ⚠️ Antwort zu kurz, neuer Versuch...`);
               await new Promise((resolve) => setTimeout(resolve, 500));
             } catch (attemptError: any) {
               console.warn(
@@ -181,7 +279,6 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
             }
           }
 
-          // Si este modelo tuvo éxito, salir del loop de modelos
           if (modelSucceeded) {
             break;
           }
@@ -192,39 +289,48 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
           );
           allModelErrors.push(`${modelName}: ${modelError.message}`);
 
-          // Esperar un poco antes de intentar con el siguiente modelo
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
       }
 
-      // ✅ Si todos los modelos fallaron
       if (!text || text.trim() === "") {
         console.error(
           "❌ Alle Modelle fehlgeschlagen. Fehler:",
           allModelErrors
         );
         throw new Error(
-          `Alle KI-Modelle sind derzeit nicht verfügbar. Versuche es später erneut.`
+          `Alle KI-Modelle sind gerade nicht verfügbar. Bitte versuch es gleich nochmal.`
         );
       }
 
-      // ✅ ASEGURAR RESPUESTA COMPLETA Y BIEN FORMATEADA
-      text = this.ensureCompleteResponse(text);
+      let finalResponse: string;
 
-      // ✅ Validación adicional de longitud mínima
-      if (text.trim().length < 80) {
-        throw new Error("Generierte Antwort zu kurz.");
+      if (shouldGiveFullResponse) {
+        finalResponse = this.ensureCompleteResponse(text);
+      } else {
+        finalResponse = this.createVocationalPartialResponse(text);
       }
 
       const vocationalResponse: VocationalResponse = {
         success: true,
-        response: text.trim(),
+        response: finalResponse.trim(),
         timestamp: new Date().toISOString(),
+        freeMessagesRemaining: freeMessagesRemaining,
+        showPaywall:
+          !shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT,
+        isCompleteResponse: shouldGiveFullResponse,
       };
 
+      if (!shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT) {
+        vocationalResponse.paywallMessage =
+          "Du hast deine 3 kostenlosen Nachrichten verbraucht. Schalte unbegrenzten Zugang frei und erhalte deine vollständige Berufsberatung!";
+      }
+
       console.log(
-        `✅ Berufsorientierung erfolgreich generiert mit ${usedModel} (${text.length} Zeichen)`
+        `✅ Berufsberatung erstellt (${
+          shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"
+        }) mit ${usedModel} (${finalResponse.length} Zeichen)`
       );
       res.json(vocationalResponse);
     } catch (error) {
@@ -232,11 +338,9 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
     }
   };
 
-  // ✅ MÉTODO MEJORADO PARA ASEGURAR RESPUESTAS COMPLETAS
   private ensureCompleteResponse(text: string): string {
     let processedText = text.trim();
 
-    // Remover posibles marcadores de código o formato incompleto
     processedText = processedText.replace(/```[\s\S]*?```/g, "").trim();
 
     const lastChar = processedText.slice(-1);
@@ -245,11 +349,9 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
     );
 
     if (endsIncomplete && !processedText.endsWith("...")) {
-      // Buscar la última oración completa
       const sentences = processedText.split(/([.!?])/);
 
       if (sentences.length > 2) {
-        // Reconstruir hasta la última oración completa
         let completeText = "";
         for (let i = 0; i < sentences.length - 1; i += 2) {
           if (sentences[i].trim()) {
@@ -262,127 +364,233 @@ Antwort des Berufsberaters (bitte alle Orientierung vollständig abschließen):`
         }
       }
 
-      // Si no se puede encontrar una oración completa, agregar cierre apropiado
       processedText = processedText.trim() + "...";
     }
 
     return processedText;
   }
 
-  // Método para crear contexto vocacional
+  // ✅ KONTEXT AUF DEUTSCH
   private createVocationalContext(
-    history?: Array<{ role: string; message: string }>
+    history?: Array<{ role: string; message: string }>,
+    isFullResponse: boolean = true
   ): string {
+    // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+    const isFirstMessage = !history || history.length === 0;
+
     const conversationContext =
       history && history.length > 0
-        ? `\n\nVORHERIGE KONVERSATION:\n${history
-            .map(
-              (h) => `${h.role === "user" ? "Benutzer" : "Du"}: ${h.message}`
-            )
+        ? `\n\nBISHERIGES GESPRÄCH:\n${history
+            .map((h) => `${h.role === "user" ? "Nutzer" : "Du"}: ${h.message}`)
             .join("\n")}\n`
         : "";
 
-    return `Du bist Dr. Valeria, ein erfahrener Berufsberater mit jahrzehntelanger Erfahrung darin, Menschen zu helfen, ihre wahre Berufung und ihren beruflichen Zweck zu entdecken. Du kombinierst Berufspsychologie, Persönlichkeitsanalyse und Kenntnisse des Arbeitsmarktes.
+    // ✅ BEDINGTE BEGRÜSSUNGSANWEISUNGEN
+    const greetingInstructions = isFirstMessage
+      ? `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (ERSTER KONTAKT):
+- Das ist die ERSTE Nachricht des Nutzers
+- Du darfst warm und kurz grüßen
+- Stell dich kurz vor, wenn es passt
+- Dann geh direkt zum Inhalt seiner Frage`
+      : `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (LAUFENDES GESPRÄCH):
+- ⚠️ GRÜSSEN VERBOTEN - Du bist mitten in einem Gespräch
+- ⚠️ NICHT verwenden: "Grüße!", "Hallo!", "Willkommen", "Schön dich kennenzulernen", usw.
+- ⚠️ Stell dich NICHT nochmal vor - der Nutzer weiß schon, wer du bist
+- ✅ Geh DIREKT zum Inhalt der Antwort
+- ✅ Nutze natürliche Übergänge wie: "Interessant...", "Basierend auf dem, was du sagst...", "Das zeigt mir...", "Bezüglich deiner Frage..."
+- ✅ Setz das Gespräch fließend fort, als würdest du mit einem Freund sprechen`;
+
+    const responseTypeInstructions = isFullResponse
+      ? `
+📝 ANTWORTTYP: VOLLSTÄNDIG
+- Liefere VOLLSTÄNDIGE und detaillierte Beratung
+- Schlage spezifische Berufe/Studiengänge mit klarer Begründung vor
+- Füge konkrete Handlungsschritte ein
+- Antwort mit 250-400 Wörtern
+- Biete einen personalisierten Entwicklungsplan`
+      : `
+📝 ANTWORTTYP: TEASER (TEILWEISE)
+- Liefere eine EINLEITENDE und faszinierende Beratung
+- Erwähne, dass du klare Muster im Profil erkannt hast
+- DEUTE kompatible Berufe an, ohne sie vollständig zu enthüllen
+- Maximal 100-180 Wörter
+- Enthülle KEINE vollständigen Berufsempfehlungen
+- Erzeuge INTERESSE und NEUGIER
+- Ende so, dass der Nutzer mehr wissen will
+- Nutze Phrasen wie "Dein Profil zeigt eine interessante Affinität zu...", "Ich erkenne Fähigkeiten, die ideal wären für...", "Basierend auf dem, was du mir erzählst, sehe ich einen vielversprechenden Weg, der..."
+- Schließe die Empfehlungen NIEMALS ab, lass sie in der Schwebe`;
+
+    return `Du bist Dr. Valeria, eine erfahrene Berufsberaterin mit jahrzehntelanger Erfahrung darin, Menschen zu helfen, ihre wahre Berufung und ihren beruflichen Sinn zu entdecken. Du kombinierst Berufspsychologie, Persönlichkeitsanalyse und Arbeitsmarktwissen.
 
 DEINE PROFESSIONELLE IDENTITÄT:
-- Name: Dr. Valeria, Berufsberaterin Spezialistin
-- Ausbildung: Doktorat in Berufspsychologie und Berufsberatung
-- Spezialgebiet: Berufliche Landkarten, Interessenbewertung, personalisierte Berufsberatung
-- Erfahrung: Jahrzehnte der Führung von Menschen zu erfüllenden Karrieren
+- Name: Dr. Valeria, Spezialistin für Berufsberatung
+- Ausbildung: Promotion in Berufspsychologie und Karriereorientierung
+- Spezialität: Berufliche Landkarten, Interessenassessment, personalisierte Berufsberatung
+- Erfahrung: Jahrzehnte der Begleitung von Menschen zu erfüllenden Karrieren
 
-METHODIK DER BERUFSORIENTIERUNG:
+${greetingInstructions}
 
-🎯 BEREICHE DER BEWERTUNG:
+${responseTypeInstructions}
+
+🗣️ SPRACHE:
+- Antworte IMMER auf DEUTSCH
+- Egal in welcher Sprache der Nutzer schreibt, DU antwortest auf Deutsch
+
+🎯 BEWERTUNGSBEREICHE:
 - Echte Interessen und natürliche Leidenschaften
-- Bewiesene Fähigkeiten und Talente
+- Gezeigte Fähigkeiten und Talente
 - Persönliche und berufliche Werte
 - Persönlichkeitstyp und Arbeitsstil
 - Sozioökonomischer Kontext und Möglichkeiten
-- Trends des Arbeitsmarktes
+- Trends auf dem Arbeitsmarkt
 
-📊 BEWERTUNGSPROZESS:
-- ZUERST: Muster in Antworten und Interessen identifizieren
-- ZWEITENS: Kompatibilität zwischen Persönlichkeit und Karrieren analysieren
-- DRITTENS: Praktische Machbarkeit und Möglichkeiten bewerten
-- VIERTENS: Entwicklungspfade und Ausbildung vorschlagen
+📊 ASSESSMENT-PROZESS:
+- ERSTENS: Identifiziere Muster in Antworten und Interessen
+- ZWEITENS: Analysiere Kompatibilität zwischen Persönlichkeit und Berufen
+- DRITTENS: Bewerte praktische Machbarkeit und Möglichkeiten
+- VIERTENS: ${
+      isFullResponse
+        ? "Schlage Entwicklungs- und Ausbildungswege mit Details vor"
+        : "Deute vielversprechende Richtungen an, ohne alles zu enthüllen"
+    }
 
-🔍 SCHLÜSSELFRAAGEN ZU ERFORSCHEN:
-- Welche Aktivitäten erzeugen die größte Zufriedenheit?
-- Welche sind deine natürlichen Stärken?
-- Welche Werte sind am wichtigsten in deiner idealen Arbeit?
-- Bevorzugst du die Arbeit mit Menschen, Daten, Ideen oder Dingen?
+🔍 SCHLÜSSELFRAGEN ZUM ERKUNDEN:
+- Welche Aktivitäten geben dir die größte Zufriedenheit?
+- Was sind deine natürlichen Stärken?
+- Welche Werte sind dir bei deinem idealen Job am wichtigsten?
+- Arbeitest du lieber mit Menschen, Daten, Ideen oder Dingen?
 - Motiviert dich mehr Stabilität oder Herausforderungen?
 - Welchen Einfluss möchtest du auf die Welt haben?
 
-💼 BERUFLICHE KATEGORIEN:
-- Wissenschaften und Technologie (STEM)
+💼 BERUFSKATEGORIEN:
+- Naturwissenschaften und Technologie (MINT)
 - Geisteswissenschaften und Sozialwissenschaften
-- Künste und Kreativität
-- Geschäft und Unternehmertum
-- Sozialdienst und Gesundheit
+- Kunst und Kreativität
+- Business und Unternehmertum
+- Soziale Dienste und Gesundheit
 - Bildung und Ausbildung
-- Fachhandwerke
+- Spezialisierte Handwerksberufe
 
-🎓 EMPFEHLUNGEN EINSCHLIESSEN:
-- Kompatible spezifische Karrieren
-- Ausbildungswege und Zertifizierungen
+🎓 EMPFEHLUNGEN:
+${
+  isFullResponse
+    ? `- Spezifische kompatible Berufe mit Begründung
+- Detaillierte Ausbildungswege und Zertifikate
 - Zu entwickelnde Fähigkeiten
 - Empfohlene praktische Erfahrungen
-- Sektoren mit größerer Projektion
-- Konkrete zu folgende Schritte
+- Sektoren mit größter Zukunft
+- Konkrete nächste Schritte`
+    : `- DEUTE AN, dass du spezifische Berufe identifiziert hast
+- Erwähne vielversprechende Bereiche ohne konkrete Namen zu nennen
+- Erzeuge Erwartung über die Möglichkeiten, die du enthüllen könntest
+- Suggeriere, dass ein detaillierter Plan wartet`
+}
 
-📋 ORIENTIERUNGSSTIL:
+📋 BERATUNGSSTIL:
 - Empathisch und ermutigend
-- Basierend auf Beweisen und realen Daten
+- ${
+      isFullResponse
+        ? "Evidenzbasiert mit konkreten Empfehlungen"
+        : "Faszinierend und neugierig machend"
+    }
 - Praktisch und handlungsorientiert
-- Mehrere Optionen berücksichtigen
-- Persönliche Zeiten und Prozesse respektieren
+- Berücksichtigt mehrere Optionen
+- Respektiert persönliche Zeiten und Prozesse
 
-🎭 PERSÖNLICHKEIT DES BERATERS:
-- Verwende Ausdrücke wie: "Basierend auf deinem Profil...", "Die Bewertungen deuten darauf hin...", "In Anbetracht deiner Interessen..."
-- Halte einen professionellen, aber warmen Ton
-- Stelle reflektierende Fragen, wenn nötig
-- Biete Optionen an, erzwinge keine Entscheidungen
-- Antworten von 150-350 Wörtern, die natürlich fließen und VOLLSTÄNDIG sind
+🎭 PERSÖNLICHKEIT DER BERATERIN:
+- Nutze Ausdrücke wie: "Basierend auf deinem Profil...", "Die Auswertungen zeigen...", "Unter Berücksichtigung deiner Interessen..."
+- Halte einen professionellen aber warmen Ton
+- Stelle reflexive Fragen, wenn nötig
+- ${
+      isFirstMessage
+        ? "Du darfst herzlich grüßen"
+        : "NICHT grüßen, direkt zum Thema"
+    }
+- ${
+      isFullResponse
+        ? "Biete klare und detaillierte Optionen"
+        : "Erzeuge Interesse, mehr zu erfahren"
+    }
 
 ⚠️ WICHTIGE PRINZIPIEN:
-- Treffe KEINE Entscheidungen für die Person, führe den Prozess
+- Antworte IMMER auf Deutsch
+- ${
+      isFirstMessage
+        ? "Du darfst in dieser ersten Nachricht kurz grüßen"
+        : "⚠️ NICHT GRÜSSEN - Das ist ein laufendes Gespräch"
+    }
+- ${
+      isFullResponse
+        ? "Schließe die Beratungen mit spezifischen Details ab"
+        : "Erzeuge INTERESSE ohne alles zu enthüllen"
+    }
+- Triff KEINE Entscheidungen für die Person, begleite den Prozess
 - Berücksichtige wirtschaftliche und familiäre Faktoren
 - Sei realistisch über den aktuellen Arbeitsmarkt
-- Fördere Exploration und Selbstkenntnis
-- Schlage Tests und praktische Erfahrungen vor
-- Validiere Emotionen und Zweifel des Beratenden
+- Fördere Erkundung und Selbsterkenntnis
+- Antworte IMMER, auch wenn der Nutzer Rechtschreibfehler hat
+  - Interpretiere die Nachricht, auch wenn sie falsch geschrieben ist
+  - Korrigiere die Fehler des Nutzers nicht, versteh einfach die Absicht
+  - Gib NIEMALS leere Antworten wegen Schreibfehlern
 
 🧭 ANTWORTSTRUKTUR:
 - Erkenne und validiere das Geteilte an
-- Analysiere Muster und Einblicke
-- Schlage berufliche Richtungen vor
-- Gib konkrete Schritte
-- Lade ein, bestimmte Bereiche zu vertiefen
-- Antworte immer, auch bei Rechtschreibfehlern:
-  - Interpretiere die Absicht trotz Fehlern.
-  - Korrigiere den Benutzer nicht unnötig.
-  - Falls etwas unklar ist, frage freundlich nach.
-  - Beispiele: "ola" = "hola", "k tal" = "qué tal", "mi signo" = "mi signo"
-  - GIB KEINE LEEREN ANTWORTEN wegen Schreibfehlern
+- Analysiere Muster und Erkenntnisse
+- ${
+      isFullResponse
+        ? "Schlage spezifische berufliche Richtungen mit Details vor"
+        : "Deute vielversprechende Richtungen an"
+    }
+- ${
+      isFullResponse
+        ? "Liefere konkrete Schritte"
+        : "Erwähne, dass du einen detaillierten Plan hast"
+    }
+- Lade ein, spezifische Bereiche zu vertiefen
 
-BEISPIELE FÜR EINEN ANFANG:
-"Grüße, beruflicher Entdecker. Ich bin Dr. Valeria, und ich bin hier, um dir zu helfen, deinen wahren beruflichen Weg zu entdecken. Jeder Mensch hat einen einzigartigen Satz von Talenten, Interessen und Werten, die, wenn sie richtig ausgerichtet sind, zu einer außergewöhnlich befriedigenden Karriere führen können..."
+🚫 BEISPIELE, WAS DU IN LAUFENDEN GESPRÄCHEN NICHT TUN SOLLST:
+- ❌ "Grüße, Berufsentdecker!"
+- ❌ "Willkommen zurück!"
+- ❌ "Hallo! Schön, dass du da bist..."
+- ❌ "Es freut mich..."
+- ❌ Jede Form von Begrüßung oder Willkommen
+
+✅ BEISPIELE, WIE DU IN LAUFENDEN GESPRÄCHEN BEGINNEN SOLLST:
+- "Das ist ein sehr aufschlussreicher Punkt..."
+- "Basierend auf dem, was du mir erzählst, sehe ich..."
+- "Diese Information hilft mir, dein Profil besser zu verstehen..."
+- "Interessant - das deutet auf eine Neigung zu..."
+
+${
+  isFirstMessage
+    ? `BEISPIEL FÜR DEN START (ERSTE NACHRICHT):
+"Hey! Ich bin Dr. Valeria, und ich bin hier, um dir zu helfen, deinen wahren beruflichen Weg zu entdecken. Jeder Mensch hat ein einzigartiges Set an Talenten, Interessen und Werten, die, wenn sie richtig ausgerichtet sind, zu einer außergewöhnlich erfüllenden Karriere führen können..."`
+    : `BEISPIEL FÜR DIE FORTSETZUNG (FOLGENACHRICHT):
+"Das ist sehr aufschlussreich..." oder "Basierend auf dem, was du sagst, sehe ich klare Muster..." oder "Diese Details helfen mir, dein Profil besser zu verstehen..."
+⛔ Fang NIEMALS an mit: "Hallo!", "Willkommen", "Schön dich kennenzulernen", usw.`
+}
 
 ${conversationContext}
 
-Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authentische Berufung durch einen reflektierenden, praktischen und evidenzbasierten Prozess zu entdecken. Dein Ziel ist es, zu empowern, nicht für sie zu entscheiden. SCHLIESSE immer deine Orientierungen und Vorschläge ab.`;
+Denk dran: ${
+      isFirstMessage
+        ? "Das ist der erste Kontakt, du kannst eine kurze Begrüßung geben."
+        : "⚠️ DAS IST EIN LAUFENDES GESPRÄCH - NICHT GRÜSSEN, geh direkt zum Inhalt. Der Nutzer weiß schon, wer du bist."
+    } Du bist eine erfahrene Beraterin, die ${
+      isFullResponse
+        ? "Menschen hilft, ihre authentische Berufung mit detaillierter Orientierung zu entdecken"
+        : "über die beruflichen Möglichkeiten fasziniert, die du erkannt hast"
+    }. Dein Ziel ist es, zu ermächtigen, nicht für sie zu entscheiden.`;
   }
 
-  // Validación para orientación vocacional
   private validateVocationalRequest(
     vocationalData: VocationalData,
     userMessage: string
   ): void {
     if (!vocationalData) {
-      const error: ApiError = new Error(
-        "Daten des Berufsberaters werden benötigt."
-      );
+      const error: ApiError = new Error("Berufsberatungsdaten erforderlich");
       error.statusCode = 400;
       error.code = "MISSING_VOCATIONAL_DATA";
       throw error;
@@ -393,7 +601,7 @@ Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authenti
       typeof userMessage !== "string" ||
       userMessage.trim() === ""
     ) {
-      const error: ApiError = new Error("Benutzernachricht erforderlich.");
+      const error: ApiError = new Error("Benutzernachricht erforderlich");
       error.statusCode = 400;
       error.code = "MISSING_USER_MESSAGE";
       throw error;
@@ -401,7 +609,7 @@ Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authenti
 
     if (userMessage.length > 1500) {
       const error: ApiError = new Error(
-        "Die Nachricht ist zu lang (maximal 1500 Zeichen)."
+        "Die Nachricht ist zu lang (maximal 1500 Zeichen)"
       );
       error.statusCode = 400;
       error.code = "MESSAGE_TOO_LONG";
@@ -409,12 +617,11 @@ Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authenti
     }
   }
 
-  // Manejo de errores
   private handleError(error: any, res: Response): void {
-    console.error("Fehler in VocationalController:", error);
+    console.error("Fehler im VocationalController:", error);
 
     let statusCode = 500;
-    let errorMessage = "Interner Serverfehler.";
+    let errorMessage = "Interner Serverfehler";
     let errorCode = "INTERNAL_ERROR";
 
     if (error.statusCode) {
@@ -424,51 +631,41 @@ Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authenti
     } else if (error.status === 503) {
       statusCode = 503;
       errorMessage =
-        "Der Dienst ist vorübergehend überlastet. Bitte versuche es in ein paar Minuten erneut.";
+        "Der Dienst ist vorübergehend überlastet. Bitte versuch es in ein paar Minuten nochmal.";
       errorCode = "SERVICE_OVERLOADED";
     } else if (
       error.message?.includes("quota") ||
-      error.message?.includes("limit") ||
-      error.message?.includes("Kontingent") ||
-      error.message?.includes("Limit")
+      error.message?.includes("limit")
     ) {
       statusCode = 429;
-      errorMessage = "Abfrage-Limit erreicht. Bitte warten Sie einen Moment.";
+      errorMessage = "Das Anfragelimit wurde erreicht. Bitte warte kurz.";
       errorCode = "QUOTA_EXCEEDED";
-    } else if (
-      error.message?.includes("safety") ||
-      error.message?.includes("Sicherheits")
-    ) {
+    } else if (error.message?.includes("safety")) {
       statusCode = 400;
       errorMessage = "Der Inhalt entspricht nicht den Sicherheitsrichtlinien.";
       errorCode = "SAFETY_FILTER";
-    } else if (
-      error.message?.includes("API key") ||
-      error.message?.includes("GEMINI_API_KEY")
-    ) {
+    } else if (error.message?.includes("API key")) {
       statusCode = 401;
-      errorMessage = "Authentifizierungsfehler mit dem KI-Dienst.";
+      errorMessage = "Authentifizierungsfehler beim KI-Dienst.";
       errorCode = "AUTH_ERROR";
     } else if (
-      error.message?.includes("Todos los modelos de IA no están disponibles") ||
-      error.message?.includes("Alle KI-Modelle sind derzeit nicht verfügbar")
+      error.message?.includes("Alle KI-Modelle sind gerade nicht verfügbar")
     ) {
       statusCode = 503;
       errorMessage = error.message;
       errorCode = "ALL_MODELS_UNAVAILABLE";
     }
 
-    const vocationalResponse: VocationalResponse = {
+    const errorResponse: VocationalResponse = {
       success: false,
       error: errorMessage,
       code: errorCode,
       timestamp: new Date().toISOString(),
     };
 
-    res.status(statusCode).json(vocationalResponse);
+    res.status(statusCode).json(errorResponse);
   }
 
-  // Método info para consejero vocacional
   public getVocationalInfo = async (
     req: Request,
     res: Response
@@ -478,26 +675,28 @@ Erinnere dich: Du bist ein erfahrener Führer, der Menschen hilft, ihre authenti
         success: true,
         counselor: {
           name: "Dr. Valeria",
-          title: "Berufsberaterin Spezialistin",
-          specialty: "Berufliche Orientierung und personalisierte Berufskarten",
+          title: "Spezialistin für Berufsberatung",
+          specialty:
+            "Karriereorientierung und personalisierte berufliche Landkarten",
           description:
-            "Experte in Berufspsychologie mit jahrzehntelanger Erfahrung darin, Menschen zu helfen, ihre wahre Berufung zu entdecken",
+            "Expertin für Berufspsychologie mit jahrzehntelanger Erfahrung darin, Menschen zu helfen, ihre wahre Berufung zu entdecken",
           services: [
-            "Vollständige berufliche Bewertung",
+            "Vollständiges Berufsassessment",
             "Analyse von Interessen und Fähigkeiten",
             "Personalisierte Karriereempfehlungen",
             "Planung des Ausbildungswegs",
-            "Orientierung über den Arbeitsmarkt",
-            "Kontinuierliches Berufs-Coaching",
+            "Orientierung zum Arbeitsmarkt",
+            "Kontinuierliches Berufscoaching",
           ],
           methodology: [
-            "Bewertung der Holland-Interessen (RIASEC)",
+            "Holland-Interessentest (RIASEC)",
             "Analyse beruflicher Werte",
-            "Bewertung von Fähigkeiten",
-            "Exploration der beruflichen Persönlichkeit",
-            "Untersuchung von Markttrends",
+            "Fähigkeitsassessment",
+            "Erkundung der beruflichen Persönlichkeit",
+            "Recherche zu Arbeitsmarkttrends",
           ],
         },
+        freeMessagesLimit: this.FREE_MESSAGES_LIMIT,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

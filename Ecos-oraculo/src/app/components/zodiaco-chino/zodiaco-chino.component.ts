@@ -24,7 +24,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { PaypalService } from "../../services/paypal.service";
+import { PaypalService } from '../../services/paypal.service';
 
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environmets.prod';
@@ -60,6 +60,7 @@ interface ZodiacAnimal {
   element?: string;
   traits?: string[];
 }
+
 @Component({
   selector: 'app-zodiaco-chino',
   imports: [
@@ -73,7 +74,6 @@ interface ZodiacAnimal {
     MatIconModule,
     MatProgressSpinnerModule,
     RecolectaDatosComponent,
-    FortuneWheelComponent,
   ],
   templateUrl: './zodiaco-chino.component.html',
   styleUrl: './zodiaco-chino.component.css',
@@ -84,7 +84,7 @@ export class ZodiacoChinoComponent
 {
   @ViewChild('messagesContainer') messagesContainer!: ElementRef;
 
-  // Propiedades principales
+  // Haupteigenschaften
   masterInfo: MasterInfo | null = null;
   userForm: FormGroup;
   isFormCompleted = false;
@@ -97,40 +97,44 @@ export class ZodiacoChinoComponent
   private shouldScrollToBottom = false;
   private shouldAutoScroll = true;
   private lastMessageCount = 0;
-  //Variables para control de fortuna
+
+  // Variablen für Glücksrad-Steuerung
   showFortuneWheel: boolean = false;
   horoscopePrizes: Prize[] = [
     {
       id: '1',
-      name: '3 Drehungen des Sternzeichenrades',
+      name: '3 Drehungen des Sternzeichen-Rades',
       color: '#4ecdc4',
       icon: '🔮',
     },
     {
       id: '2',
-      name: '1 Premium-Sternzeichenanalyse',
+      name: '1 Premium-Sternzeichen-Analyse',
       color: '#45b7d1',
       icon: '✨',
     },
-    // ✅ ELIMINADO: { id: '3', name: '2 Consultas Astrológicas Extra', color: '#ffeaa7', icon: '🌟' },
     {
       id: '4',
-      name: 'Versuche es nochmal!',
+      name: 'Versuche es erneut!',
       color: '#ff7675',
       icon: '🌙',
     },
   ];
   private wheelTimer: any;
-  // Variables para control de pagos
-  showPaymentModal: boolean = false;
 
+  // Variablen für Zahlungssteuerung
+  showPaymentModal: boolean = false;
   clientSecret: string | null = null;
   isProcessingPayment: boolean = false;
   paymentError: string | null = null;
   hasUserPaidForHoroscope: boolean = false;
-  firstQuestionAsked: boolean = false;
   blockedMessageId: string | null = null;
-  //Datos para enviar
+
+  // ✅ NEU: System mit 3 kostenlosen Nachrichten
+  private userMessageCount: number = 0;
+  private readonly FREE_MESSAGES_LIMIT = 3;
+
+  // Daten zum Senden
   showDataModal: boolean = false;
   userData: any = null;
   private backendUrl = environment.apiUrl;
@@ -143,7 +147,7 @@ export class ZodiacoChinoComponent
     private cdr: ChangeDetectorRef,
     private paypalService: PaypalService
   ) {
-    // Configuración del formulario para horóscopo
+    // Formularkonfiguration für Horoskop
     this.userForm = this.fb.group({
       fullName: [''],
       birthYear: [
@@ -152,13 +156,15 @@ export class ZodiacoChinoComponent
       ],
       birthDate: [''],
       initialQuestion: [
-        'Was können Sie mir über mein Sternzeichen und Horoskop sagen?',
+        'Was kannst du mir über mein Sternzeichen und Horoskop sagen?',
       ],
     });
   }
+
   ngAfterViewInit(): void {
-    this.setVideosSpeed(0.7); // 0.5 = más lento, 1 = normal
+    this.setVideosSpeed(0.7);
   }
+
   private setVideosSpeed(rate: number): void {
     const host = this.elRef.nativeElement;
     const videos = host.querySelectorAll<HTMLVideoElement>('video');
@@ -168,8 +174,9 @@ export class ZodiacoChinoComponent
       else v.addEventListener('loadedmetadata', apply, { once: true });
     });
   }
+
   async ngOnInit(): Promise<void> {
-    // ✅ Verificar si venimos de PayPal después de un pago
+    // ✅ Prüfen, ob wir nach einer Zahlung von PayPal zurückkommen
     this.hasUserPaidForHoroscope =
       sessionStorage.getItem('hasUserPaidForHoroscope_horoskop') === 'true';
 
@@ -182,35 +189,35 @@ export class ZodiacoChinoComponent
         );
 
         if (verification.valid && verification.status === 'approved') {
-          // ✅ Pago SOLO para este servicio (Horoskop)
+          // ✅ Zahlung NUR für diesen Service (Horoskop)
           this.hasUserPaidForHoroscope = true;
           sessionStorage.setItem('hasUserPaidForHoroscope_horoskop', 'true');
 
-          // NO usar localStorage global
+          // Kein globaler localStorage verwenden
           localStorage.removeItem('paypal_payment_completed');
 
           this.blockedMessageId = null;
           sessionStorage.removeItem('horoscopeBlockedMessageId');
 
-          // Limpiar URL
+          // URL bereinigen
           window.history.replaceState(
             {},
             document.title,
             window.location.pathname
           );
 
-          // Cerrar modal de pago
+          // Zahlungsmodal schließen
           this.showPaymentModal = false;
           this.isProcessingPayment = false;
           this.paymentError = null;
           this.cdr.markForCheck();
 
-          // ✅ MENSAJE DE CONFIRMACIÓN (usando firma correcta de addMessage)
+          // ✅ BESTÄTIGUNGSNACHRICHT
           setTimeout(() => {
             this.addMessage(
               'master',
               '🎉 Zahlung erfolgreich abgeschlossen!\n\n' +
-                '✨ Vielen Dank für deine Zahlung. Du hast jetzt vollen Zugriff auf das Chinesische Horoskop.\n\n' +
+                '✨ Vielen Dank für deine Zahlung. Du hast jetzt vollen Zugang zum Horoskop.\n\n' +
                 '🐉 Lass uns gemeinsam deine astrologische Zukunft entdecken!\n\n' +
                 '📌 Hinweis: Diese Zahlung gilt nur für den Horoskop-Service. Für andere Dienste ist eine separate Zahlung erforderlich.'
             );
@@ -223,23 +230,31 @@ export class ZodiacoChinoComponent
           setTimeout(() => {
             this.addMessage(
               'master',
-              '⚠️ Es gab ein Problem bei der Verifizierung deiner Zahlung. Bitte versuche es erneut oder kontaktiere unseren Support.'
+              '⚠️ Bei der Verifizierung deiner Zahlung ist ein Problem aufgetreten. Bitte versuche es erneut oder kontaktiere unseren Support.'
             );
             this.cdr.detectChanges();
           }, 800);
         }
       } catch (error) {
-        console.error('Error verificando pago de PayPal:', error);
-        this.paymentError = 'Fehler bei der Zahlungsüberprüfung';
+        console.error('Fehler bei der PayPal-Zahlungsverifizierung:', error);
+        this.paymentError = 'Fehler bei der Zahlungsverifizierung';
 
         setTimeout(() => {
           this.addMessage(
             'master',
-            '❌ Leider ist ein Fehler bei der Zahlungsüberprüfung aufgetreten. Bitte versuche es später erneut.'
+            '❌ Leider ist bei der Verifizierung deiner Zahlung ein Fehler aufgetreten. Bitte versuche es später erneut.'
           );
           this.cdr.detectChanges();
         }, 800);
       }
+    }
+
+    // ✅ NEU: Nachrichtenzähler laden
+    const savedMessageCount = sessionStorage.getItem(
+      'horoscopeUserMessageCount'
+    );
+    if (savedMessageCount) {
+      this.userMessageCount = parseInt(savedMessageCount, 10);
     }
 
     const savedUserData = sessionStorage.getItem('userData');
@@ -253,19 +268,17 @@ export class ZodiacoChinoComponent
       this.userData = null;
     }
 
-    // Cargar datos guardados específicos del horóscopo
+    // Gespeicherte Horoskop-Daten laden
     this.loadHoroscopeData();
-
-    // ✅ PayPal verifica en ngOnInit() arriba - ya no necesitamos checkHoroscopePaymentStatus()
 
     this.loadMasterInfo();
 
-    // Solo agregar mensaje de bienvenida si no hay mensajes guardados
+    // Willkommensnachricht nur hinzufügen, wenn keine gespeicherten Nachrichten vorhanden
     if (this.conversationHistory.length === 0) {
       this.initializeHoroscopeWelcomeMessage();
     }
 
-    // ✅ TAMBIÉN VERIFICAR PARA MENSAJES RESTAURADOS
+    // ✅ AUCH FÜR WIEDERHERGESTELLTE NACHRICHTEN PRÜFEN
     if (
       this.conversationHistory.length > 0 &&
       FortuneWheelComponent.canShowWheel()
@@ -273,11 +286,9 @@ export class ZodiacoChinoComponent
       this.showHoroscopeWheelAfterDelay(2000);
     }
   }
+
   private loadHoroscopeData(): void {
     const savedMessages = sessionStorage.getItem('horoscopeMessages');
-    const savedFirstQuestion = sessionStorage.getItem(
-      'horoscopeFirstQuestionAsked'
-    );
     const savedBlockedMessageId = sessionStorage.getItem(
       'horoscopeBlockedMessageId'
     );
@@ -289,7 +300,6 @@ export class ZodiacoChinoComponent
           ...msg,
           timestamp: msg.timestamp,
         }));
-        this.firstQuestionAsked = savedFirstQuestion === 'true';
         this.blockedMessageId = savedBlockedMessageId || null;
       } catch (error) {
         this.clearHoroscopeSessionData();
@@ -297,25 +307,26 @@ export class ZodiacoChinoComponent
       }
     }
   }
+
   private initializeHoroscopeWelcomeMessage(): void {
-    const welcomeMessage = `Willkommen und hallo im Reich der Sterne! 🔮✨
+    const welcomeMessage = `Willkommen im Reich der Sterne! 🔮✨
 
-Ich bin die Astrologin María, himmlische Führerin der Sternzeichen. Jahrzehntelang habe ich die Einflüsse der Planeten und Konstellationen studiert, die unser Schicksal lenken.
+Ich bin Astrologin Maria, himmlische Führerin der Sternzeichen. Seit Jahrzehnten studiere ich die Einflüsse der Planeten und Sternbilder, die unser Schicksal lenken.
 
-Jede Person wird unter dem Schutz eines Sternzeichens geboren, das ihre Persönlichkeit, ihr Schicksal und ihren Lebensweg beeinflusst. Um die Geheimnisse deines Horoskops und die himmlischen Einflüsse zu enthüllen, brauche ich dein Geburtsdatum.
+Jeder Mensch wird unter dem Schutz eines Sternzeichens geboren, das seine Persönlichkeit, sein Schicksal und seinen Lebensweg beeinflusst. Um die Geheimnisse deines Horoskops und die himmlischen Einflüsse zu enthüllen, benötige ich dein Geburtsdatum.
 
 Die zwölf Zeichen (Widder, Stier, Zwillinge, Krebs, Löwe, Jungfrau, Waage, Skorpion, Schütze, Steinbock, Wassermann und Fische) haben uralte Weisheit zu teilen.
 
-Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`;
+Bist du bereit zu entdecken, was die Sterne über dein Schicksal offenbaren? 🌙`;
 
     this.addMessage('master', welcomeMessage);
 
-    // ✅ VERIFICACIÓN DE RULETA HOROSCÓPICA
+    // ✅ HOROSKOP-RAD PRÜFUNG
     if (FortuneWheelComponent.canShowWheel()) {
       this.showHoroscopeWheelAfterDelay(3000);
-    } else {
     }
   }
+
   ngAfterViewChecked(): void {
     if (this.shouldScrollToBottom) {
       this.scrollToBottom();
@@ -335,10 +346,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     if (this.wheelTimer) {
       clearTimeout(this.wheelTimer);
     }
-    // ✅ PayPal no requiere limpieza de elementos
   }
-
-  // ✅ Método eliminado - PayPal maneja verificación en ngOnInit()
 
   private saveHoroscopeMessagesToSession(): void {
     try {
@@ -356,15 +364,17 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
   private clearHoroscopeSessionData(): void {
     sessionStorage.removeItem('hasUserPaidForHoroscope');
     sessionStorage.removeItem('horoscopeMessages');
-    sessionStorage.removeItem('horoscopeFirstQuestionAsked');
     sessionStorage.removeItem('horoscopeBlockedMessageId');
+    sessionStorage.removeItem('horoscopeUserMessageCount');
+    sessionStorage.removeItem('freeHoroscopeConsultations');
+    sessionStorage.removeItem('pendingHoroscopeMessage');
   }
 
   private saveHoroscopeStateBeforePayment(): void {
     this.saveHoroscopeMessagesToSession();
     sessionStorage.setItem(
-      'horoscopeFirstQuestionAsked',
-      this.firstQuestionAsked.toString()
+      'horoscopeUserMessageCount',
+      this.userMessageCount.toString()
     );
     if (this.blockedMessageId) {
       sessionStorage.setItem(
@@ -380,14 +390,14 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     );
   }
 
-  // ✅ MÉTODO MIGRADO A PAYPAL
+  // ✅ METHODE MIGRIERT ZU PAYPAL
   async promptForHoroscopePayment(): Promise<void> {
     this.showPaymentModal = true;
     this.cdr.markForCheck();
     this.paymentError = null;
     this.isProcessingPayment = false;
 
-    // Validar datos de usuario
+    // Benutzerdaten validieren
     if (!this.userData) {
       const savedUserData = sessionStorage.getItem('userData');
       if (savedUserData) {
@@ -401,7 +411,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
     if (!this.userData) {
       this.paymentError =
-        'Keine Kundendaten gefunden. Bitte füllen Sie das Formular zuerst aus.';
+        'Kundendaten nicht gefunden. Bitte fülle zuerst das Formular aus.';
       this.showDataModal = true;
       this.cdr.markForCheck();
       return;
@@ -410,36 +420,36 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     const email = this.userData.email?.toString().trim();
     if (!email) {
       this.paymentError =
-        'E-Mail erforderlich. Bitte füllen Sie das Formular aus.';
+        'E-Mail-Adresse erforderlich. Bitte fülle das Formular aus.';
       this.showDataModal = true;
       this.cdr.markForCheck();
       return;
     }
 
-    // Guardar mensaje pendiente si existe
+    // Ausstehende Nachricht speichern falls vorhanden
     if (this.currentMessage) {
       sessionStorage.setItem('pendingHoroscopeMessage', this.currentMessage);
     }
   }
 
-  // ✅ MÉTODO MIGRADO A PAYPAL
+  // ✅ METHODE MIGRIERT ZU PAYPAL
   async handleHoroscopePaymentSubmit(): Promise<void> {
     this.isProcessingPayment = true;
     this.paymentError = null;
     this.cdr.markForCheck();
 
     try {
-      // Iniciar el flujo de pago de PayPal (redirige al usuario)
+      // PayPal-Zahlungsfluss starten (leitet den Benutzer weiter)
       await this.paypalService.initiatePayment({
         amount: '4.00',
         currency: 'EUR',
-        serviceName: 'Chinesisches Horoskop',
+        serviceName: 'Horoskop',
         returnPath: '/horoskop',
         cancelPath: '/horoskop',
       });
 
-      // El código después de esta línea NO se ejecutará porque
-      // el usuario será redirigido a PayPal
+      // Der Code nach dieser Zeile wird NICHT ausgeführt, da
+      // der Benutzer zu PayPal weitergeleitet wird
     } catch (error: any) {
       this.paymentError =
         error.message || 'Fehler beim Initialisieren der PayPal-Zahlung.';
@@ -448,7 +458,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     }
   }
 
-  // ✅ MÉTODO SIMPLIFICADO - PayPal no requiere cleanup
+  // ✅ VEREINFACHTE METHODE - PayPal erfordert kein Cleanup
   cancelHoroscopePayment(): void {
     this.showPaymentModal = false;
     this.isProcessingPayment = false;
@@ -460,28 +470,28 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     this.showDataForm = false;
   }
 
-  // Cargar información del maestro
+  // Meister-Informationen laden
   loadMasterInfo(): void {
     this.zodiacoChinoService.getMasterInfo().subscribe({
       next: (info) => {
         this.masterInfo = info;
       },
       error: (error) => {
-        // Información predeterminada en caso de error
+        // Standardinformationen bei Fehler
         this.masterInfo = {
           success: true,
           master: {
-            name: 'Astrologin María',
-            title: 'Himmlische Führerin der Zeichen',
+            name: 'Astrologin Maria',
+            title: 'Himmlische Führerin der Sternzeichen',
             specialty: 'Westliche Astrologie und personalisiertes Horoskop',
             description:
-              'Weise Astrologin, spezialisiert auf die Interpretation himmlischer Einflüsse und der Weisheit der zwölf Sternzeichen',
+              'Weise Astrologin, spezialisiert auf die Interpretation himmlischer Einflüsse und die Weisheit der zwölf Sternzeichen',
             services: [
               'Interpretation von Sternzeichen',
-              'Analyse von Astralkarten',
+              'Analyse von Geburtshoroskopen',
               'Horoskop-Vorhersagen',
-              'Kompatibilität zwischen Zeichen',
-              'Astrologiebasierte Ratschläge',
+              'Kompatibilität zwischen Sternzeichen',
+              'Astrologische Beratung',
             ],
           },
           timestamp: new Date().toISOString(),
@@ -490,36 +500,28 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     });
   }
 
-  // Iniciar consulta del horóscopo
+  // Horoskop-Beratung starten
   startConsultation(): void {
     if (this.userForm.valid && !this.isLoading) {
       this.isLoading = true;
-      this.cdr.markForCheck(); // ✅ Detectar cambio de loading
+      this.cdr.markForCheck();
 
       const formData = this.userForm.value;
-
-      // Calcular animal del zodiaco
 
       const initialMessage =
         formData.initialQuestion ||
         'Hallo! Ich würde gerne mehr über mein Sternzeichen und Horoskop erfahren.';
 
-      // Agregar mensaje del usuario
+      // Benutzernachricht hinzufügen
       this.addMessage('user', initialMessage);
 
-      // Marcar que se hizo la primera pregunta
-      if (!this.firstQuestionAsked) {
-        this.firstQuestionAsked = true;
-        sessionStorage.setItem('horoscopeFirstQuestionAsked', 'true');
-      }
-
-      // Preparar datos para enviar al backend
+      // Daten für Backend vorbereiten
       const consultationData = {
         zodiacData: {
-          name: 'Astrologin María',
+          name: 'Astrologin Maria',
           specialty: 'Westliche Astrologie und personalisiertes Horoskop',
           experience:
-            'Jahrzehnte der Erfahrung in astrologischer Interpretation',
+            'Jahrzehntelange Erfahrung in astrologischer Interpretation',
         },
         userMessage: initialMessage,
         fullName: formData.fullName,
@@ -528,83 +530,123 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
         conversationHistory: this.conversationHistory,
       };
 
-      // Llamar al servicio
-      this.zodiacoChinoService.chatWithMaster(consultationData).subscribe({
-        next: (response) => {
-          this.isLoading = false;
-          if (response.success && response.response) {
-            this.addMessage('master', response.response);
-            this.isFormCompleted = true;
-            this.showDataForm = false;
-            this.saveHoroscopeMessagesToSession();
+      // ✅ Service mit Nachrichtenzähler aufrufen (erste Nachricht = 1)
+      this.zodiacoChinoService
+        .chatWithMasterWithCount(
+          consultationData,
+          1,
+          this.hasUserPaidForHoroscope
+        )
+        .subscribe({
+          next: (response) => {
+            this.isLoading = false;
+            if (response.success && response.response) {
+              this.addMessage('master', response.response);
+              this.isFormCompleted = true;
+              this.showDataForm = false;
+              this.saveHoroscopeMessagesToSession();
+              this.cdr.markForCheck();
+            } else {
+              this.handleError('Fehler in der Antwort der Astrologin');
+            }
+          },
+          error: (error) => {
+            this.isLoading = false;
+            this.handleError(
+              'Fehler bei der Verbindung zur Astrologin: ' +
+                (error.error?.error || error.message)
+            );
             this.cdr.markForCheck();
-          } else {
-            this.handleError('Fehler in der Antwort der Astrologin');
-          }
-        },
-        error: (error) => {
-          this.isLoading = false;
-          this.handleError(
-            'Fehler beim Verbinden mit der Astrologin: ' +
-              (error.error?.error || error.message)
-          );
-          this.cdr.markForCheck();
-        },
-      });
+          },
+        });
     }
+  }
+
+  // ✅ NEU: Verbleibende kostenlose Nachrichten abrufen
+  getFreeMessagesRemaining(): number {
+    if (this.hasUserPaidForHoroscope) {
+      return -1; // Unbegrenzt
+    }
+    return Math.max(0, this.FREE_MESSAGES_LIMIT - this.userMessageCount);
   }
 
   sendMessage(): void {
     if (this.currentMessage.trim() && !this.isLoading) {
       const message = this.currentMessage.trim();
 
-      // ✅ LÓGICA ACTUALIZADA: Verificar acceso premium O consultas gratuitas
-      if (!this.hasUserPaidForHoroscope && this.firstQuestionAsked) {
-        // Verificar si tiene consultas horoscópicas gratis disponibles
-        if (this.hasFreeHoroscopeConsultationsAvailable()) {
-          this.useFreeHoroscopeConsultation();
-          // Continuar con el mensaje sin bloquear
-        } else {
-          // Si no tiene consultas gratis NI acceso premium, mostrar modal de datos
+      // Nächste Nachrichtennummer berechnen
+      const nextMessageCount = this.userMessageCount + 1;
 
-          // Cerrar otros modales primero
-          this.showFortuneWheel = false;
-          this.showPaymentModal = false;
+      console.log(
+        `📊 Horoskop - Nachricht #${nextMessageCount}, Premium: ${this.hasUserPaidForHoroscope}, Limit: ${this.FREE_MESSAGES_LIMIT}`
+      );
 
-          // Guardar el mensaje para procesarlo después del pago
-          sessionStorage.setItem('pendingHoroscopeMessage', message);
+      // ✅ Zugang prüfen
+      const canSendMessage =
+        this.hasUserPaidForHoroscope ||
+        this.hasFreeHoroscopeConsultationsAvailable() ||
+        nextMessageCount <= this.FREE_MESSAGES_LIMIT;
 
-          this.saveHoroscopeStateBeforePayment();
+      if (!canSendMessage) {
+        console.log('❌ Kein Zugang - Zahlungsmodal anzeigen');
 
-          // Mostrar modal de datos con timeout
-          setTimeout(() => {
-            this.showDataModal = true;
-            this.cdr.markForCheck();
-          }, 100);
+        // Andere Modals schließen
+        this.showFortuneWheel = false;
+        this.showPaymentModal = false;
 
-          return; // Salir aquí para no procesar el mensaje aún
-        }
+        // Ausstehende Nachricht speichern
+        sessionStorage.setItem('pendingHoroscopeMessage', message);
+        this.saveHoroscopeStateBeforePayment();
+
+        // Datenmodal anzeigen
+        setTimeout(() => {
+          this.showDataModal = true;
+          this.cdr.markForCheck();
+        }, 100);
+
+        return;
       }
 
-      // Procesar mensaje normalmente
-      this.processHoroscopeUserMessage(message);
+      // ✅ Wenn kostenlose Rad-Beratung verwendet wird (nach den 3 kostenlosen)
+      if (
+        !this.hasUserPaidForHoroscope &&
+        nextMessageCount > this.FREE_MESSAGES_LIMIT &&
+        this.hasFreeHoroscopeConsultationsAvailable()
+      ) {
+        this.useFreeHoroscopeConsultation();
+      }
+
+      // Nachricht normal verarbeiten
+      this.processHoroscopeUserMessage(message, nextMessageCount);
     }
   }
-  private processHoroscopeUserMessage(message: string): void {
+
+  private processHoroscopeUserMessage(
+    message: string,
+    messageCount: number
+  ): void {
     this.currentMessage = '';
     this.isLoading = true;
     this.isTyping = true;
-    this.cdr.markForCheck(); // ✅ Detectar cambios de estado
+    this.cdr.markForCheck();
 
-    // Agregar mensaje del usuario
+    // Benutzernachricht hinzufügen
     this.addMessage('user', message);
+
+    // ✅ Zähler aktualisieren
+    this.userMessageCount = messageCount;
+    sessionStorage.setItem(
+      'horoscopeUserMessageCount',
+      this.userMessageCount.toString()
+    );
 
     const formData = this.userForm.value;
     const consultationData = {
       zodiacData: {
-        name: 'Astrologin María',
+        name: 'Astrologin Maria',
         specialty: 'Westliche Astrologie und personalisiertes Horoskop',
-        experience: 'Jahrzehnte der Erfahrung in astrologischer Interpretation',
+        experience:
+          'Jahrzehntelange Erfahrung in astrologischer Interpretation',
       },
       userMessage: message,
       fullName: formData.fullName,
@@ -613,63 +655,68 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
       conversationHistory: this.conversationHistory,
     };
 
-    this.zodiacoChinoService.chatWithMaster(consultationData).subscribe({
-      next: (response) => {
-        this.isLoading = false;
-        this.isTyping = false;
-        this.cdr.markForCheck(); // ✅ Detectar fin de loading
-
-        if (response.success && response.response) {
-          const messageId = Date.now().toString();
-
-          this.addMessage('master', response.response, messageId);
-
-          // ✅ LÓGICA ACTUALIZADA: Solo bloquear si NO tiene acceso premium Y no tiene consultas gratis
-          if (
-            this.firstQuestionAsked &&
-            !this.hasUserPaidForHoroscope && // No tiene acceso premium
-            !this.hasFreeHoroscopeConsultationsAvailable() // No tiene consultas gratis
-          ) {
-            this.blockedMessageId = messageId;
-            sessionStorage.setItem('horoscopeBlockedMessageId', messageId);
-
-            setTimeout(() => {
-              this.saveHoroscopeStateBeforePayment();
-
-              // Cerrar otros modales
-              this.showFortuneWheel = false;
-              this.showPaymentModal = false;
-
-              // Mostrar modal de datos
-              setTimeout(() => {
-                this.showDataModal = true;
-                this.cdr.markForCheck();
-              }, 100);
-            }, 2000);
-          } else if (!this.firstQuestionAsked) {
-            this.firstQuestionAsked = true;
-            sessionStorage.setItem('horoscopeFirstQuestionAsked', 'true');
-          }
-
-          this.saveHoroscopeMessagesToSession();
+    // ✅ Service mit Nachrichtenzähler aufrufen
+    this.zodiacoChinoService
+      .chatWithMasterWithCount(
+        consultationData,
+        messageCount,
+        this.hasUserPaidForHoroscope
+      )
+      .subscribe({
+        next: (response) => {
+          this.isLoading = false;
+          this.isTyping = false;
           this.cdr.markForCheck();
-        } else {
-          this.handleError('Fehler in der Antwort der Astrologin');
-        }
-      },
-      error: (error) => {
-        this.isLoading = false;
-        this.isTyping = false;
-        this.handleError(
-          'Fehler beim Verbinden mit der Astrologin: ' +
-            (error.error?.error || error.message)
-        );
-        this.cdr.markForCheck();
-      },
-    });
+
+          if (response.success && response.response) {
+            const messageId = Date.now().toString();
+
+            this.addMessage('master', response.response, messageId);
+
+            // ✅ Paywall anzeigen wenn Limit überschritten UND keine Rad-Beratungen vorhanden
+            const shouldShowPaywall =
+              !this.hasUserPaidForHoroscope &&
+              messageCount > this.FREE_MESSAGES_LIMIT &&
+              !this.hasFreeHoroscopeConsultationsAvailable();
+
+            if (shouldShowPaywall) {
+              this.blockedMessageId = messageId;
+              sessionStorage.setItem('horoscopeBlockedMessageId', messageId);
+
+              setTimeout(() => {
+                this.saveHoroscopeStateBeforePayment();
+
+                // Andere Modals schließen
+                this.showFortuneWheel = false;
+                this.showPaymentModal = false;
+
+                // Datenmodal anzeigen
+                setTimeout(() => {
+                  this.showDataModal = true;
+                  this.cdr.markForCheck();
+                }, 100);
+              }, 2000);
+            }
+
+            this.saveHoroscopeMessagesToSession();
+            this.cdr.markForCheck();
+          } else {
+            this.handleError('Fehler in der Antwort der Astrologin');
+          }
+        },
+        error: (error) => {
+          this.isLoading = false;
+          this.isTyping = false;
+          this.handleError(
+            'Fehler bei der Verbindung zur Astrologin: ' +
+              (error.error?.error || error.message)
+          );
+          this.cdr.markForCheck();
+        },
+      });
   }
 
-  // Manejar tecla Enter
+  // Enter-Taste behandeln
   onEnterKey(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -677,28 +724,29 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     }
   }
 
-  // Alternar formulario
+  // Formular umschalten
   toggleDataForm(): void {
     this.showDataForm = !this.showDataForm;
   }
 
-  // Reiniciar consulta
+  // Beratung zurücksetzen
   resetConsultation(): void {
     this.conversationHistory = [];
     this.isFormCompleted = false;
     this.showDataForm = true;
     this.currentMessage = '';
     this.zodiacAnimal = {};
-    this.firstQuestionAsked = false;
     this.blockedMessageId = null;
 
-    // Limpiar sessionStorage específico del horóscopo
+    // ✅ Zähler zurücksetzen
     if (!this.hasUserPaidForHoroscope) {
+      this.userMessageCount = 0;
       this.clearHoroscopeSessionData();
     } else {
       sessionStorage.removeItem('horoscopeMessages');
-      sessionStorage.removeItem('horoscopeFirstQuestionAsked');
       sessionStorage.removeItem('horoscopeBlockedMessageId');
+      sessionStorage.removeItem('horoscopeUserMessageCount');
+      this.userMessageCount = 0;
     }
 
     this.userForm.reset({
@@ -706,20 +754,20 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
       birthYear: '',
       birthDate: '',
       initialQuestion:
-        'Was können Sie mir über mein Sternzeichen und Horoskop sagen?',
+        'Was kannst du mir über mein Sternzeichen und Horoskop sagen?',
     });
     this.initializeHoroscopeWelcomeMessage();
   }
 
-  // Explorar compatibilidad
+  // Kompatibilität erkunden
   exploreCompatibility(): void {
     const message =
-      'Könnten Sie über die Kompatibilität meines Sternzeichens mit anderen Zeichen sprechen?';
+      'Könntest du über die Kompatibilität meines Sternzeichens mit anderen Zeichen sprechen?';
     this.currentMessage = message;
     this.sendMessage();
   }
 
-  // Explorar elementos
+  // Elemente erkunden
   exploreElements(): void {
     const message =
       'Wie beeinflussen die Planeten meine Persönlichkeit und mein Schicksal?';
@@ -727,7 +775,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     this.sendMessage();
   }
 
-  // Métodos auxiliares
+  // Hilfsmethoden
   private addMessage(
     role: 'user' | 'master',
     message: string,
@@ -742,7 +790,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     this.conversationHistory.push(newMessage);
     this.shouldScrollToBottom = true;
     this.saveHoroscopeMessagesToSession();
-    this.cdr.markForCheck(); // ✅ CRÍTICO: Detectar cambios en mensajes
+    this.cdr.markForCheck();
   }
 
   private scrollToBottom(): void {
@@ -757,7 +805,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
   private handleError(message: string): void {
     this.addMessage(
       'master',
-      `Es tut mir leid, ${message}. Bitte versuchen Sie es erneut.`
+      `Entschuldigung, ${message}. Bitte versuche es erneut.`
     );
   }
 
@@ -766,16 +814,16 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
     let formattedContent = content;
 
-    // Convertir **texto** a <strong>texto</strong> para negrilla
+    // **Text** zu <strong>Text</strong> für Fettschrift konvertieren
     formattedContent = formattedContent.replace(
       /\*\*(.*?)\*\*/g,
       '<strong>$1</strong>'
     );
 
-    // Convertir saltos de línea a <br> para mejor visualización
+    // Zeilenumbrüche zu <br> für bessere Anzeige konvertieren
     formattedContent = formattedContent.replace(/\n/g, '<br>');
 
-    // Opcional: También puedes manejar *texto* (una sola asterisco) como cursiva
+    // Optional: *Text* (einzelnes Sternchen) als Kursiv behandeln
     formattedContent = formattedContent.replace(
       /(?<!\*)\*([^*\n]+)\*(?!\*)/g,
       '<em>$1</em>'
@@ -797,14 +845,14 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     return `${message.role}-${message.timestamp}-${index}`;
   }
 
-  // Auto-resize del textarea
+  // Auto-resize des Textbereichs
   autoResize(event: any): void {
     const textarea = event.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
   }
 
-  // Manejar tecla Enter
+  // Tastendruck behandeln
   onKeyPress(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -812,119 +860,139 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
     }
   }
 
-  // Limpiar chat
+  // Chat löschen
   clearChat(): void {
     this.conversationHistory = [];
     this.currentMessage = '';
-    this.firstQuestionAsked = false;
     this.blockedMessageId = null;
     this.isLoading = false;
 
-    // Limpiar sessionStorage específico del horóscopo (pero NO userData)
-    sessionStorage.removeItem('horoscopeMessages');
-    sessionStorage.removeItem('horoscopeFirstQuestionAsked');
-    sessionStorage.removeItem('horoscopeBlockedMessageId');
+    // ✅ Zähler zurücksetzen
+    if (!this.hasUserPaidForHoroscope) {
+      this.userMessageCount = 0;
+      sessionStorage.removeItem('horoscopeMessages');
+      sessionStorage.removeItem('horoscopeBlockedMessageId');
+      sessionStorage.removeItem('horoscopeUserMessageCount');
+      sessionStorage.removeItem('freeHoroscopeConsultations');
+      sessionStorage.removeItem('pendingHoroscopeMessage');
+    } else {
+      sessionStorage.removeItem('horoscopeMessages');
+      sessionStorage.removeItem('horoscopeBlockedMessageId');
+      sessionStorage.removeItem('horoscopeUserMessageCount');
+      this.userMessageCount = 0;
+    }
 
     this.shouldScrollToBottom = true;
     this.initializeHoroscopeWelcomeMessage();
   }
+
   resetChat(): void {
-    // 1. Reset de arrays y mensajes
+    // 1. Arrays und Nachrichten zurücksetzen
     this.conversationHistory = [];
     this.currentMessage = '';
 
-    // 2. Reset de estados de carga y typing
+    // 2. Lade- und Typing-Status zurücksetzen
     this.isLoading = false;
     this.isTyping = false;
 
-    // 3. Reset de estados de formulario
+    // 3. Formularstatus zurücksetzen
     this.isFormCompleted = false;
     this.showDataForm = true;
 
-    // 4. Reset de estados de pago y bloqueo
-    this.firstQuestionAsked = false;
+    // 4. Zahlungs- und Sperrstatus zurücksetzen
     this.blockedMessageId = null;
 
-    // 5. Reset de modales
+    // 5. Modals zurücksetzen
     this.showPaymentModal = false;
     this.showDataModal = false;
     this.showFortuneWheel = false;
 
-    // 6. Reset de variables de scroll y contadores
+    // 6. Scroll-Variablen und Zähler zurücksetzen
     this.shouldScrollToBottom = false;
     this.shouldAutoScroll = true;
-    this.lastMessageCount = 0; // ← Esta era tu variable contador
+    this.lastMessageCount = 0;
 
-    // 7. Reset del zodiac animal
+    // 7. Zodiac-Tier zurücksetzen
     this.zodiacAnimal = {};
 
-    // 8. ✅ PayPal no requiere cleanup de elementos
+    // 8. ✅ PayPal erfordert kein Element-Cleanup
     this.isProcessingPayment = false;
     this.paymentError = null;
 
-    // 9. Limpiar timers
+    // 9. Timer löschen
     if (this.wheelTimer) {
       clearTimeout(this.wheelTimer);
     }
 
-    // 10. Limpiar sessionStorage específico del horóscopo (pero NO userData)
-    sessionStorage.removeItem('horoscopeMessages');
-    sessionStorage.removeItem('horoscopeFirstQuestionAsked');
-    sessionStorage.removeItem('horoscopeBlockedMessageId');
-    sessionStorage.removeItem('pendingHoroscopeMessage');
-    // NO limpiar 'userData' ni 'hasUserPaidForHoroscope'
+    // 10. ✅ Zähler zurücksetzen und sessionStorage löschen
+    if (!this.hasUserPaidForHoroscope) {
+      this.userMessageCount = 0;
+      sessionStorage.removeItem('horoscopeMessages');
+      sessionStorage.removeItem('horoscopeBlockedMessageId');
+      sessionStorage.removeItem('horoscopeUserMessageCount');
+      sessionStorage.removeItem('freeHoroscopeConsultations');
+      sessionStorage.removeItem('pendingHoroscopeMessage');
+    } else {
+      sessionStorage.removeItem('horoscopeMessages');
+      sessionStorage.removeItem('horoscopeBlockedMessageId');
+      sessionStorage.removeItem('horoscopeUserMessageCount');
+      this.userMessageCount = 0;
+    }
+    // NICHT 'userData' oder 'hasUserPaidForHoroscope' löschen
 
-    // 11. Reset del formulario
+    // 11. Formular zurücksetzen
     this.userForm.reset({
       fullName: '',
       birthYear: '',
       birthDate: '',
       initialQuestion:
-        'Was können Sie mir über mein Sternzeichen und Horoskop sagen?',
+        'Was kannst du mir über mein Sternzeichen und Horoskop sagen?',
     });
 
-    // 12. Reinicializar mensaje de bienvenida
+    // 12. Willkommensnachricht neu initialisieren
     this.initializeHoroscopeWelcomeMessage();
     this.cdr.markForCheck();
   }
+
   onUserDataSubmitted(userData: any): void {
-    // ✅ VALIDAR CAMPOS CRÍTICOS ANTES DE PROCEDER
-    const requiredFields = ['email']; // ❌ QUITADO 'apellido' - ahora está unificado con nombre
+    // ✅ KRITISCHE FELDER VOR DEM FORTFAHREN VALIDIEREN
+    const requiredFields = ['email'];
     const missingFields = requiredFields.filter(
       (field) => !userData[field] || userData[field].toString().trim() === ''
     );
 
     if (missingFields.length > 0) {
       alert(
-        `Um fortzufahren, müssen Sie folgendes ausfüllen: ${missingFields.join(
+        `Um fortzufahren, musst du folgendes ausfüllen: ${missingFields.join(
           ', '
         )}`
       );
-      this.showDataModal = true; // Mantener modal abierto
+      this.showDataModal = true; // Modal offen halten
       this.cdr.markForCheck();
       return;
     }
 
-    // ✅ LIMPIAR Y GUARDAR datos INMEDIATAMENTE en memoria Y sessionStorage
+    // ✅ Daten SOFORT im Speicher UND sessionStorage bereinigen und speichern
     this.userData = {
       ...userData,
       email: userData.email?.toString().trim(),
     };
 
-    // ✅ GUARDAR EN sessionStorage INMEDIATAMENTE
+    // ✅ SOFORT in sessionStorage speichern
     try {
       sessionStorage.setItem('userData', JSON.stringify(this.userData));
 
-      // Verificar que se guardaron correctamente
+      // Überprüfen, ob korrekt gespeichert wurde
       const verificacion = sessionStorage.getItem('userData');
     } catch (error) {}
 
     this.showDataModal = false;
     this.cdr.markForCheck();
 
-    // ✅ NUEVO: Enviar datos al backend como en otros componentes
+    // ✅ NEU: Daten wie in anderen Komponenten an Backend senden
     this.sendUserDataToBackend(userData);
   }
+
   private sendUserDataToBackend(userData: any): void {
     this.http.post(`${this.backendUrl}api/recolecta`, userData).subscribe({
       next: (response) => {
@@ -935,10 +1003,12 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
       },
     });
   }
+
   onDataModalClosed(): void {
     this.showDataModal = false;
     this.cdr.markForCheck();
   }
+
   showHoroscopeWheelAfterDelay(delayMs: number = 3000): void {
     if (this.wheelTimer) {
       clearTimeout(this.wheelTimer);
@@ -951,8 +1021,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
         !this.showDataModal
       ) {
         this.showFortuneWheel = true;
-        this.cdr.markForCheck(); // ✅ Forzar detección de cambios
-      } else {
+        this.cdr.markForCheck();
       }
     }, delayMs);
   }
@@ -960,7 +1029,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
   onPrizeWon(prize: Prize): void {
     const prizeMessage: ChatMessage = {
       role: 'master',
-      message: `🔮 Die Sterne haben sich zu deinen Gunsten verschworen! Du hast gewonnen: **${prize.name}** ${prize.icon}\n\nDie himmlischen Kräfte haben beschlossen, dich mit diesem heiligen Geschenk zu segnen. Die Sternzeichen-Energie fließt durch dich, tiefere Geheimnisse deines persönlichen Horoskops enthüllend. Möge die astrologische Weisheit dich erleuchten!`,
+      message: `🔮 Die Sterne haben zu deinen Gunsten konspiriert! Du hast gewonnen: **${prize.name}** ${prize.icon}\n\nDie himmlischen Kräfte haben beschlossen, dich mit diesem heiligen Geschenk zu segnen. Die Energie des Sternzeichens fließt durch dich und offenbart tiefere Geheimnisse deines persönlichen Horoskops. Möge die astrologische Weisheit dich erleuchten!`,
       timestamp: new Date().toISOString(),
     };
 
@@ -982,7 +1051,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
     if (FortuneWheelComponent.canShowWheel()) {
       this.showFortuneWheel = true;
-      this.cdr.markForCheck(); // ✅ Forzar detección de cambios
+      this.cdr.markForCheck();
     } else {
       alert(
         'Du hast keine Drehungen mehr verfügbar. ' +
@@ -997,32 +1066,31 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
   private processHoroscopePrize(prize: Prize): void {
     switch (prize.id) {
-      case '1': // 3 Lecturas Horoscópicas
+      case '1': // 3 Horoskop-Lesungen
         this.addFreeHoroscopeConsultations(3);
         break;
-      case '2': // 1 Análisis Premium - ACCESO COMPLETO
+      case '2': // 1 Premium-Analyse - VOLLER ZUGANG
         this.hasUserPaidForHoroscope = true;
         sessionStorage.setItem('hasUserPaidForHoroscope', 'true');
 
-        // Desbloquear cualquier mensaje bloqueado
+        // Blockierte Nachricht entsperren
         if (this.blockedMessageId) {
           this.blockedMessageId = null;
           sessionStorage.removeItem('horoscopeBlockedMessageId');
         }
 
-        // Agregar mensaje especial para este premio
+        // Spezielle Nachricht für diesen Preis hinzufügen
         const premiumMessage: ChatMessage = {
           role: 'master',
           message:
-            '🌟 **Du hast den vollständigen Premium-Zugang freigeschaltet!** 🌟\n\nDie Sterne haben außergewöhnlich auf dich gelächelt. Jetzt hast du unbegrenzten Zugang zu all meiner astrologischen Weisheit. Du kannst so oft wie du möchtest über dein Horoskop, Kompatibilität, Vorhersagen und alle himmlischen Geheimnisse konsultieren.\n\n✨ *Das Universum hat alle Türen für dich geöffnet* ✨',
+            '🌟 **Du hast den vollständigen Premium-Zugang freigeschaltet!** 🌟\n\nDie Sterne haben dir außerordentlich zugelächelt. Du hast jetzt unbegrenzten Zugang zu meiner gesamten astrologischen Weisheit. Du kannst dein Horoskop, Kompatibilität, Vorhersagen und alle himmlischen Geheimnisse so oft anfragen, wie du möchtest.\n\n✨ *Das Universum hat dir alle Türen geöffnet* ✨',
           timestamp: new Date().toISOString(),
         };
         this.conversationHistory.push(premiumMessage);
         this.shouldScrollToBottom = true;
         this.saveHoroscopeMessagesToSession();
         break;
-      // ✅ ELIMINADO: case '3' - 2 Consultas Extra
-      case '4': // Otra oportunidad
+      case '4': // Noch eine Chance
         break;
       default:
     }
@@ -1062,7 +1130,7 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
       const prizeMsg: ChatMessage = {
         role: 'master',
-        message: `✨ *Du hast eine kostenlose astrologische Lesung verwendet* ✨\n\nDir bleiben **${remaining}** astrologische Konsultationen verfügbar.`,
+        message: `✨ *Du hast eine kostenlose astrologische Lesung verwendet* ✨\n\nDir bleiben noch **${remaining}** astrologische Beratungen verfügbar.`,
         timestamp: new Date().toISOString(),
       };
       this.conversationHistory.push(prizeMsg);
@@ -1073,10 +1141,10 @@ Bist du bereit zu entdecken, was die Sterne über dein Schicksal verraten? 🌙`
 
   debugHoroscopeWheel(): void {
     this.showFortuneWheel = true;
-    this.cdr.markForCheck(); // ✅ Forzar detección de cambios
+    this.cdr.markForCheck();
   }
 
-  // ✅ MÉTODO AUXILIAR para el template
+  // ✅ HILFSMETHODE für das Template
   getHoroscopeConsultationsCount(): number {
     return parseInt(
       sessionStorage.getItem('freeHoroscopeConsultations') || '0'

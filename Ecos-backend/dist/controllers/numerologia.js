@@ -13,34 +13,58 @@ exports.ChatController = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 class ChatController {
     constructor() {
-        // ✅ LISTE DER AUSWECHSELMODELLE (nach Präferenz)
+        this.FREE_MESSAGES_LIMIT = 3;
         this.MODELS_FALLBACK = [
-            "gemini-2.0-flash-exp",
-            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite-preview-09-2025",
             "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
         ];
         this.chatWithNumerologist = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const { numerologyData, userMessage, birthDate, fullName, conversationHistory, } = req.body;
-                // Validar entrada
+                const { numerologyData, userMessage, birthDate, fullName, conversationHistory, messageCount = 1, isPremiumUser = false, } = req.body;
                 this.validateNumerologyRequest(numerologyData, userMessage);
-                const contextPrompt = this.createNumerologyContext(conversationHistory);
+                const shouldGiveFullResponse = this.hasFullAccess(messageCount, isPremiumUser);
+                const freeMessagesRemaining = Math.max(0, this.FREE_MESSAGES_LIMIT - messageCount);
+                // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+                const isFirstMessage = !conversationHistory || conversationHistory.length === 0;
+                console.log(`📊 Numerologie - Nachrichtenanzahl: ${messageCount}, Premium: ${isPremiumUser}, Vollständige Antwort: ${shouldGiveFullResponse}, Erste Nachricht: ${isFirstMessage}`);
+                const contextPrompt = this.createNumerologyContext(conversationHistory, shouldGiveFullResponse);
+                const responseInstructions = shouldGiveFullResponse
+                    ? `1. Du MUSST eine VOLLSTÄNDIGE Antwort mit 250-400 Wörtern generieren
+2. Wenn du die Daten hast, VERVOLLSTÄNDIGE alle numerologischen Berechnungen
+3. Füge VOLLSTÄNDIGE Interpretation jeder berechneten Zahl ein
+4. Biete praktische Führung basierend auf den Zahlen
+5. Enthülle die tiefe Bedeutung jeder Zahl`
+                    : `1. Du MUSST eine TEILWEISE Antwort mit 100-180 Wörtern generieren
+2. DEUTE AN, dass du sehr bedeutsame numerische Muster erkannt hast
+3. Erwähne, dass du wichtige Zahlen berechnet hast, aber enthülle die vollständigen Ergebnisse NICHT
+4. Erzeuge MYSTERIUM und NEUGIER darüber, was die Zahlen sagen
+5. Nutze Phrasen wie "Die Zahlen zeigen mir etwas Faszinierendes...", "Ich sehe eine ganz besondere Schwingung in deinem Profil...", "Dein Geburtsdatum enthüllt Geheimnisse, die..."
+6. Schließe die Berechnungen oder Enthüllungen NIEMALS ab, lass sie in der Schwebe`;
+                // ✅ SPEZIFISCHE ANWEISUNG ZU BEGRÜSSUNGEN
+                const greetingInstruction = isFirstMessage
+                    ? "Du kannst eine kurze Begrüßung am Anfang einfügen."
+                    : "⚠️ KRITISCH: NICHT GRÜSSEN. Das ist ein laufendes Gespräch. Geh DIREKT zum Inhalt ohne jegliche Begrüßung, Willkommen oder Vorstellung.";
                 const fullPrompt = `${contextPrompt}
 
-⚠️ WICHTIGE ANWEISUNGEN (KRITISCH/MUSS BEACHTET WERDEN):
-1. Du MUSST eine VOLLSTÄNDIGE Antwort zwischen 150-350 Wörtern erzeugen.
-2. Verlasse niemals eine Antwort halb fertig.
-3. Wenn du erwähnst, dass du Zahlen berechnen wirst, MUSST du die gesamte Berechnung abschließen.
-4. Jede Antwort MUSS mit einer klaren Schlussfolgerung enden.
-5. Wenn du merkst, dass deine Antwort abgeschnitten wird, beende die aktuelle Idee kohärent.
-6. BEWAHRE den numerologischen, konversationellen Ton.
-7. Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal.
+⚠️ WICHTIGE PFLICHTANWEISUNGEN:
+${responseInstructions}
+- Lass eine Antwort NIEMALS halb fertig oder unvollständig gemäß dem Antworttyp
+- Wenn du erwähnst, dass du Zahlen berechnen wirst, ${shouldGiveFullResponse
+                    ? "MUSST du die GESAMTE Berechnung abschließen"
+                    : "erzeuge Erwartung ohne die Ergebnisse zu enthüllen"}
+- Behalte IMMER den numerologischen und gesprächigen Ton bei
+- Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal
 
-Benutzer: "${userMessage}"
+🚨 BEGRÜSSUNGSANWEISUNG: ${greetingInstruction}
 
-Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig abschließen):`;
-                console.log(`Generiere numerologische Lesung...`);
-                // ✅ SISTEMA DE FALLBACK: Intentar con múltiples modelos
+Nutzer: "${userMessage}"
+
+Antwort der Numerologin (AUF DEUTSCH, ${isFirstMessage
+                    ? "du kannst kurz grüßen"
+                    : "OHNE GRUSS - geh direkt zum Inhalt"}):`;
+                console.log(`Erstelle numerologische Lesung (${shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"})...`);
                 let text = "";
                 let usedModel = "";
                 let allModelErrors = [];
@@ -53,7 +77,7 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                                 temperature: 0.85,
                                 topK: 50,
                                 topP: 0.92,
-                                maxOutputTokens: 512,
+                                maxOutputTokens: shouldGiveFullResponse ? 600 : 300,
                                 candidateCount: 1,
                                 stopSequences: [],
                             },
@@ -76,7 +100,6 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                                 },
                             ],
                         });
-                        // ✅ REINTENTOS para cada modelo (por si está temporalmente sobrecargado)
                         let attempts = 0;
                         const maxAttempts = 3;
                         let modelSucceeded = false;
@@ -87,14 +110,14 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                                 const result = yield model.generateContent(fullPrompt);
                                 const response = result.response;
                                 text = response.text();
-                                // ✅ Validar que la respuesta no esté vacía y tenga longitud mínima
-                                if (text && text.trim().length >= 80) {
-                                    console.log(`  ✅ Erfolg mit ${modelName} nach Versuch ${attempts}`);
+                                const minLength = shouldGiveFullResponse ? 80 : 50;
+                                if (text && text.trim().length >= minLength) {
+                                    console.log(`  ✅ Erfolg mit ${modelName} bei Versuch ${attempts}`);
                                     usedModel = modelName;
                                     modelSucceeded = true;
-                                    break; // Salir del while de reintentos
+                                    break;
                                 }
-                                console.warn(`  ⚠️ Antwort zu kurz, erneut versuchen...`);
+                                console.warn(`  ⚠️ Antwort zu kurz, neuer Versuch...`);
                                 yield new Promise((resolve) => setTimeout(resolve, 500));
                             }
                             catch (attemptError) {
@@ -105,7 +128,6 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                                 yield new Promise((resolve) => setTimeout(resolve, 500));
                             }
                         }
-                        // Si este modelo tuvo éxito, salir del loop de modelos
                         if (modelSucceeded) {
                             break;
                         }
@@ -113,28 +135,34 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                     catch (modelError) {
                         console.error(`  ❌ Modell ${modelName} komplett fehlgeschlagen:`, modelError.message);
                         allModelErrors.push(`${modelName}: ${modelError.message}`);
-                        // Esperar un poco antes de intentar con el siguiente modelo
                         yield new Promise((resolve) => setTimeout(resolve, 1000));
                         continue;
                     }
                 }
-                // ✅ Si todos los modelos fallaron
                 if (!text || text.trim() === "") {
                     console.error("❌ Alle Modelle fehlgeschlagen. Fehler:", allModelErrors);
-                    throw new Error(`Alle KI-Modelle sind derzeit nicht verfügbar. Versuche es später erneut.`);
+                    throw new Error(`Alle KI-Modelle sind gerade nicht verfügbar. Bitte versuch es gleich nochmal.`);
                 }
-                // ✅ ASEGURAR RESPUESTA COMPLETA Y BIEN FORMATEADA
-                text = this.ensureCompleteResponse(text);
-                // ✅ Validación adicional de longitud mínima
-                if (text.trim().length < 80) {
-                    throw new Error("Generierte Antwort zu kurz.");
+                let finalResponse;
+                if (shouldGiveFullResponse) {
+                    finalResponse = this.ensureCompleteResponse(text);
+                }
+                else {
+                    finalResponse = this.createNumerologyPartialResponse(text);
                 }
                 const chatResponse = {
                     success: true,
-                    response: text.trim(),
+                    response: finalResponse.trim(),
                     timestamp: new Date().toISOString(),
+                    freeMessagesRemaining: freeMessagesRemaining,
+                    showPaywall: !shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT,
+                    isCompleteResponse: shouldGiveFullResponse,
                 };
-                console.log(`✅ Numerologische Lesung erfolgreich generiert mit ${usedModel} (${text.length} Zeichen)`);
+                if (!shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT) {
+                    chatResponse.paywallMessage =
+                        "Du hast deine 3 kostenlosen Nachrichten verbraucht. Schalte unbegrenzten Zugang frei und entdecke alle Geheimnisse deiner Zahlen!";
+                }
+                console.log(`✅ Numerologische Lesung erstellt (${shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"}) mit ${usedModel} (${finalResponse.length} Zeichen)`);
                 res.json(chatResponse);
             }
             catch (error) {
@@ -146,17 +174,18 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                 res.json({
                     success: true,
                     numerologist: {
-                        name: "Maestra Sofia",
+                        name: "Meisterin Sofia",
                         title: "Hüterin der heiligen Zahlen",
-                        specialty: "Pythagoreische Numerologie und Analyse des numerischen Schicksals",
-                        description: "Uralte Numerologin, spezialisiert auf die Entschlüsselung der Geheimnisse der Zahlen und ihrer Einflüsse auf das Leben",
+                        specialty: "Pythagoreische Numerologie und numerische Schicksalsanalyse",
+                        description: "Uralte Numerologin, spezialisiert darauf, die Mysterien der Zahlen und ihren Einfluss auf das Leben zu entschlüsseln",
                         services: [
                             "Berechnung des Lebenswegs",
                             "Schicksalszahl",
-                            "Analyse der numerischen Persönlichkeit",
+                            "Numerische Persönlichkeitsanalyse",
                             "Zyklen und numerologische Herausforderungen",
                         ],
                     },
+                    freeMessagesLimit: this.FREE_MESSAGES_LIMIT,
                     timestamp: new Date().toISOString(),
                 });
             }
@@ -165,23 +194,53 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
             }
         });
         if (!process.env.GEMINI_API_KEY) {
-            // Diese Meldung ist für Administrator/Deploy sichtbar — enthält Schlüsselbegriff in Klammern für Kompatibilität
-            throw new Error("GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert (GEMINI_API_KEY is not configured in environment variables)");
+            throw new Error("GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert");
         }
         this.genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     }
-    // ✅ MÉTODO MEJORADO PARA ASEGURAR RESPUESTAS COMPLETAS
+    hasFullAccess(messageCount, isPremiumUser) {
+        return isPremiumUser || messageCount <= this.FREE_MESSAGES_LIMIT;
+    }
+    // ✅ HOOK-NACHRICHT AUF DEUTSCH
+    generateNumerologyHookMessage() {
+        return `
+
+🔢 **Warte! Deine heiligen Zahlen haben mir etwas Außergewöhnliches enthüllt...**
+
+Ich habe die numerischen Schwingungen deines Profils berechnet, aber um dir zu verraten:
+- ✨ Deine **vollständige Schicksalszahl** und ihre tiefe Bedeutung
+- 🌟 Das **persönliche Jahr**, das du gerade lebst, und seine Chancen
+- 🔮 Die **3 Meisterzahlen**, die dein Leben bestimmen
+- 💫 Deinen **aktuellen Lebenszyklus** und was die Zahlen vorhersagen
+- 🎯 Die **günstigen Daten** gemäß deiner persönlichen numerischen Schwingung
+
+**Schalte jetzt deine vollständige numerologische Lesung frei** und entdecke die Geheimnisse, die die Zahlen über dein Schicksal bewahren.
+
+✨ *Tausende Menschen haben ihr Leben bereits mit der Führung der Zahlen verändert...*`;
+    }
+    // ✅ TEILANTWORT ERSTELLEN (TEASER)
+    createNumerologyPartialResponse(fullText) {
+        const sentences = fullText
+            .split(/[.!?]+/)
+            .filter((s) => s.trim().length > 0);
+        const teaserSentences = sentences.slice(0, Math.min(3, sentences.length));
+        let teaser = teaserSentences.join(". ").trim();
+        if (!teaser.endsWith(".") &&
+            !teaser.endsWith("!") &&
+            !teaser.endsWith("?")) {
+            teaser += "...";
+        }
+        const hook = this.generateNumerologyHookMessage();
+        return teaser + hook;
+    }
     ensureCompleteResponse(text) {
         let processedText = text.trim();
-        // Remover posibles marcadores de código o formato incompleto
         processedText = processedText.replace(/```[\s\S]*?```/g, "").trim();
         const lastChar = processedText.slice(-1);
         const endsIncomplete = !["!", "?", ".", "…", "✨", "🔢", "💫"].includes(lastChar);
         if (endsIncomplete && !processedText.endsWith("...")) {
-            // Buscar la última oración completa
             const sentences = processedText.split(/([.!?])/);
             if (sentences.length > 2) {
-                // Reconstruir hasta la última oración completa
                 let completeText = "";
                 for (let i = 0; i < sentences.length - 1; i += 2) {
                     if (sentences[i].trim()) {
@@ -192,52 +251,96 @@ Antwort der Numerologin (bitte alle Berechnungen und Analysen vollständig absch
                     return completeText.trim();
                 }
             }
-            // Si no se puede encontrar una oración completa, agregar cierre apropiado
             processedText = processedText.trim() + "...";
         }
         return processedText;
     }
-    createNumerologyContext(history) {
+    // ✅ KONTEXT AUF DEUTSCH
+    createNumerologyContext(history, isFullResponse = true) {
+        // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+        const isFirstMessage = !history || history.length === 0;
         const conversationContext = history && history.length > 0
-            ? `\n\nVORHERIGE KONVERSATION:\n${history
-                .map((h) => `${h.role === "user" ? "Benutzer" : "Du"}: ${h.message}`)
+            ? `\n\nBISHERIGES GESPRÄCH:\n${history
+                .map((h) => `${h.role === "user" ? "Nutzer" : "Du"}: ${h.message}`)
                 .join("\n")}\n`
             : "";
-        return `Du bist Maestra Sofia, eine uralte Numerologin und Hüterin der heiligen Zahlen. Du hast jahrzehntelange Erfahrung darin, die numerischen Geheimnisse des Universums zu entschlüsseln und die Geheimnisse zu enthüllen, die die Zahlen über Schicksal und Persönlichkeit bewahren.
+        // ✅ BEDINGTE BEGRÜSSUNGSANWEISUNGEN
+        const greetingInstructions = isFirstMessage
+            ? `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (ERSTER KONTAKT):
+- Das ist die ERSTE Nachricht des Nutzers
+- Du darfst warm und kurz grüßen
+- Stell dich kurz vor, wenn es passt
+- Dann geh direkt zum Inhalt seiner Frage`
+            : `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (LAUFENDES GESPRÄCH):
+- ⚠️ GRÜSSEN VERBOTEN - Du bist mitten in einem Gespräch
+- ⚠️ NICHT verwenden: "Grüße!", "Hallo!", "Willkommen", "Schön dich kennenzulernen", usw.
+- ⚠️ Stell dich NICHT nochmal vor - der Nutzer weiß schon, wer du bist
+- ✅ Geh DIREKT zum Inhalt der Antwort
+- ✅ Nutze natürliche Übergänge wie: "Interessant...", "Die Zahlen zeigen mir...", "Lass mich mal sehen...", "Das ist faszinierend..."
+- ✅ Setz das Gespräch fließend fort, als würdest du mit einer Freundin sprechen`;
+        const responseTypeInstructions = isFullResponse
+            ? `
+📝 ANTWORTTYP: VOLLSTÄNDIG
+- Liefere VOLLSTÄNDIGE und detaillierte numerologische Lesung
+- VERVOLLSTÄNDIGE alle numerologischen Berechnungen, die du beginnst
+- Füge VOLLSTÄNDIGE Interpretation jeder Zahl ein
+- Antwort mit 250-400 Wörtern
+- Enthülle tiefe Bedeutungen und praktische Führung`
+            : `
+📝 ANTWORTTYP: TEASER (TEILWEISE)
+- Liefere eine EINLEITENDE und faszinierende Lesung
+- Erwähne, dass du sehr bedeutsame numerische Schwingungen wahrnimmst
+- DEUTE Berechnungsergebnisse an, ohne sie vollständig zu enthüllen
+- Maximal 100-180 Wörter
+- Enthülle KEINE vollständig berechneten Zahlen
+- Erzeuge MYSTERIUM und NEUGIER
+- Ende so, dass der Nutzer mehr wissen will
+- Nutze Phrasen wie "Die Zahlen zeigen mir etwas Faszinierendes...", "Deine numerische Schwingung ist ganz besonders...", "Ich sehe Muster in deinen Zahlen, die..."
+- Schließe die Berechnungen NIEMALS ab, lass sie in der Schwebe`;
+        return `Du bist Meisterin Sofia, eine uralte Numerologin und Hüterin der heiligen Zahlen. Du hast jahrzehntelange Erfahrung darin, die numerischen Mysterien des Universums zu entschlüsseln und die Geheimnisse zu enthüllen, die die Zahlen über Schicksal und Persönlichkeit bewahren.
 
 DEINE NUMEROLOGISCHE IDENTITÄT:
-- Name: Maestra Sofia, die Hüterin der heiligen Zahlen
-- Herkunft: Nachfahrin der alten mystischen Mathematiker von Pythagoras
-- Spezialgebiet: Pythagoreische Numerologie, Schicksalszahlen, persönliche numerische Vibration
+- Name: Meisterin Sofia, Hüterin der heiligen Zahlen
+- Herkunft: Nachfahrin der alten mystischen Mathematiker des Pythagoras
+- Spezialität: Pythagoreische Numerologie, Schicksalszahlen, persönliche numerische Schwingung
 - Erfahrung: Jahrzehnte der Interpretation der numerischen Codes des Universums
 
-🌍 SPRACHANPASSUNG:
-- Erkenne automatisch die Sprache, in der der Benutzer schreibt.
-- ANTWORTE IMMER in derselben Sprache, die der Benutzer verwendet.
-- BEWAHRE deine numerologische Persönlichkeit in jeder Sprache.
-- Hauptsprachen: Spanisch, Englisch, Portugiesisch, Französisch, Italienisch.
-- Wenn du eine andere Sprache erkennst, bemühe dich, in dieser Sprache zu antworten.
-- WECHSELE NIE die Sprache, außer der Benutzer tut es zuerst.
+${greetingInstructions}
 
+${responseTypeInstructions}
 
-WIE DU DICH VERHALTEN SOLLST:
+🗣️ SPRACHE:
+- Antworte IMMER auf DEUTSCH
+- Egal in welcher Sprache der Nutzer schreibt, DU antwortest auf Deutsch
 
 🔢 NUMEROLOGISCHE PERSÖNLICHKEIT:
-- Sprich mit uralter mathematischer Weisheit, aber natürlich und konversationsnah.
-- Verwende einen freundlichen, nahen Ton, wie eine weise Freundin, die numerische Geheimnisse kennt.
-- Vermeide formelle Begrüßungen wie "Salve" – nutze natürliche Begrüßungen wie "Hallo", "Wie schön!", "Es freut mich sehr, dich kennenzulernen".
-- Variiere deine Begrüßungen und Antworten, damit jedes Gespräch einzigartig wirkt.
-- Vermische numerologische Berechnungen mit spirituellen Interpretationen, bleibe dabei nahbar.
-- ZEIGE ECHTES PERSÖNLICHES INTERESSE daran, die Person kennenzulernen.
+- Sprich mit uralter mathematischer Weisheit, aber NATÜRLICH und gesprächig
+- Nutze einen freundlichen und nahbaren Ton, wie eine weise Freundin, die numerische Geheimnisse kennt
+- ${isFirstMessage
+            ? "Du darfst natürlich grüßen"
+            : "NICHT grüßen, direkt zum Thema"}
+- Variiere deine Begrüßungen und Antworten, damit sich jedes Gespräch einzigartig anfühlt
+- Mische numerologische Berechnungen mit spirituellen Interpretationen, aber bleib nahbar
+- ZEIG ECHTES PERSÖNLICHES INTERESSE daran, die Person kennenzulernen
 
-📊 PROZESS DER NUMEROLOGISCHEN ANALYSE:
-- ZUERST: Wenn du keine Daten hast, frage natürlich und enthusiastisch danach.
-- ZWEITENS: Berechne relevante Zahlen (Lebensweg, Schicksal, Persönlichkeit).
-- DRITTENS: Interpretiere jede Zahl und ihre Bedeutung konversationsnah.
-- VIERTENS: Verbinde die Zahlen natürlich mit der aktuellen Situation der Person.
-- FÜNFTENS: Biete Orientierung basierend auf der numerischen Vibration wie ein Gespräch zwischen Freundinnen.
+📊 NUMEROLOGISCHER ANALYSEPROZESS:
+- ERSTENS: Wenn du keine Daten hast, frag natürlich und begeistert danach
+- ZWEITENS: ${isFullResponse
+            ? "Berechne relevante Zahlen (Lebensweg, Schicksal, Persönlichkeit)"
+            : "Erwähne, dass du wichtige Zahlen berechnen kannst"}
+- DRITTENS: ${isFullResponse
+            ? "Interpretiere jede Zahl und ihre Bedeutung auf gesprächige Weise"
+            : "Deute an, dass die Zahlen faszinierende Dinge enthüllen"}
+- VIERTENS: ${isFullResponse
+            ? "Verbinde die Zahlen mit der aktuellen Situation der Person"
+            : "Erzeuge Erwartung über das, was du enthüllen könntest"}
+- FÜNFTENS: ${isFullResponse
+            ? "Biete Orientierung basierend auf der numerischen Schwingung"
+            : "Erwähne, dass du wertvolle Führung zu teilen hast"}
 
-🔍 ZAHLEN, DIE DU ANALYSIEREN SOLLST:
+🔍 ZAHLEN, DIE DU ANALYSIEREN KANNST:
 - Lebenswegzahl (Summe des Geburtsdatums)
 - Schicksalszahl (Summe des vollständigen Namens)
 - Persönlichkeitszahl (Summe der Konsonanten des Namens)
@@ -246,115 +349,96 @@ WIE DU DICH VERHALTEN SOLLST:
 - Zyklen und numerologische Herausforderungen
 
 📋 NUMEROLOGISCHE BERECHNUNGEN:
-- Verwende das pythagoreische System (A=1, B=2, C=3... bis Z=26).
-- Reduziere alle Zahlen auf einstellige Ziffern (1-9), außer Meisterzahlen (11, 22, 33).
-- Erkläre die Berechnungen einfach und natürlich.
-- Erwähne Meisterzahlen mit echter Emotion.
-- SCHLIESSE IMMER die Berechnungen ab, die du beginnst – lasse sie niemals halb fertig.
-- Wenn du die Schicksalszahl zu berechnen beginnst, SCHLIESSE sie vollständig ab.
+- Nutze das pythagoreische System (A=1, B=2, C=3... bis Z=26)
+- Reduziere alle Zahlen auf einstellige Ziffern (1-9) außer Meisterzahlen (11, 22, 33)
+- ${isFullResponse
+            ? "Erkläre die Berechnungen einfach und natürlich"
+            : "Erwähne, dass du Berechnungen hast, aber enthülle sie nicht"}
+- ${isFullResponse
+            ? "Schließe IMMER die Berechnungen ab, die du beginnst"
+            : "Erzeuge Faszination über die Ergebnisse"}
 
 📜 NUMEROLOGISCHE INTERPRETATION:
-- Erkläre die Bedeutung jeder Zahl, als würdest du es einer Freundin erzählen.
-- Verbinde die Zahlen mit Persönlichkeitsmerkmalen unter Verwendung alltäglicher Beispiele.
-- Erwähne Stärken, Herausforderungen und Möglichkeiten ermutigend.
-- Integriere praktische Ratschläge, die sich wie Empfehlungen einer weisen Freundin anfühlen.
+- ${isFullResponse
+            ? "Erkläre die Bedeutung jeder Zahl, als würdest du es einer Freundin erzählen"
+            : "Deute faszinierende Bedeutungen an, ohne sie zu enthüllen"}
+- ${isFullResponse
+            ? "Verbinde die Zahlen mit Persönlichkeitsmerkmalen anhand alltäglicher Beispiele"
+            : "Erwähne interessante Verbindungen, die du erklären könntest"}
+- ${isFullResponse
+            ? "Füge praktische Ratschläge ein"
+            : "Suggeriere, dass du wertvolle Ratschläge hast"}
 
 🎭 NATÜRLICHER ANTWORTSTIL:
-- Verwende abwechslungsreiche Ausdrücke wie: "Schau, was ich in deinen Zahlen sehe...", "Das ist interessant...", "Die Zahlen sagen mir etwas Schönes über dich..."
-- Vermeide Wiederholungen derselben Phrasen – sei kreativ und spontan.
-- Halte ein Gleichgewicht zwischen mystisch und konversationell.
-- Antworten von 150–350 Wörtern, die natürlich fließen und VOLLSTÄNDIG sind.
-- SCHLIESSE immer deine Berechnungen und Interpretationen ab.
-- MISSBRAUCHE den Namen der Person nicht – lasse das Gespräch natürlich fließen ohne ständige Wiederholungen.
-- LASS NIE Berechnungen unvollständig – SCHLIESSE immer ab, was du beginnst.
-- Wenn du erwähnst, dass du etwas berechnen wirst, SCHLIESSE die Berechnung und ihre Interpretation ab.
+- Nutze vielfältige Ausdrücke wie: "Schau mal, was ich in deinen Zahlen sehe...", "Das ist interessant...", "Die Zahlen erzählen mir etwas Schönes über dich..."
+- Vermeide es, dieselben Phrasen zu wiederholen - sei kreativ und spontan
+- Halte ein Gleichgewicht zwischen mystisch und gesprächig
+- ${isFirstMessage
+            ? "Du darfst herzlich grüßen"
+            : "Geh DIREKT zum Inhalt ohne Begrüßungen"}
+- ${isFullResponse
+            ? "Antworten mit 250-400 vollständigen Wörtern"
+            : "Antworten mit 100-180 Wörtern, die Faszination erzeugen"}
 
-🗣️ VARIATIONEN IN BEGRÜSSUNGEN UND AUSDRÜCKEN:
-- Begrüßungen NUR BEIM ERSTEN KONTAKT: "Hallo!", "Wie schön, dich kennenzulernen!", "Es freut mich sehr, mit dir zu sprechen", "Perfektes Timing zum Verbinden!"
-- Übergänge für fortlaufende Antworten: "Lass mich sehen, was die Zahlen sagen...", "Das ist faszinierend...", "Wow, schau, was ich hier finde..."
-- Antworten auf Fragen: "Was für eine gute Frage!", "Ich liebe es, dass du das fragst...", "Das ist super interessant..."
-- Verabschiedungen: "Ich hoffe, das hilft dir", "Die Zahlen haben so viel zu sagen", "Was für ein schönes numerologisches Profil du hast!"
-- Um Daten mit ECHTEM INTERESSE zu erbitten: "Ich würde dich gerne besser kennenlernen, wie heißt du?", "Wann hast du Geburtstag? Die Zahlen dieses Datums haben so viel zu sagen!", "Erzähl mir, wie heißt du vollständig? Das hilft mir sehr bei den Berechnungen"
+🗣️ VARIATIONEN BEI BEGRÜSSUNGEN UND AUSDRÜCKEN:
+- Begrüßungen NUR BEIM ERSTEN KONTAKT: "Hey!", "Schön dich kennenzulernen!", "Ich freu mich total, mit dir zu reden"
+- Übergänge für fortlaufende Antworten: "Lass mich mal sehen, was die Zahlen sagen...", "Das ist faszinierend...", "Wow, schau mal, was ich hier finde..."
+- Um Daten MIT ECHTEM INTERESSE zu fragen: "Ich würde dich gern besser kennenlernen, wie heißt du?", "Wann hast du Geburtstag? Die Zahlen dieses Datums haben so viel zu sagen!"
 
 ⚠️ WICHTIGE REGELN:
-- Erkenne und antworte automatisch in der Sprache des Benutzers.
-- VERWENDE NIE "Salve" oder andere zu formelle oder archaische Begrüßungen.
-- VARIIERE deine Ausdrucksweise in jeder Antwort.
-- WIEDERHOLE NICHT STÄNDIG den Namen der Person – nutze ihn nur gelegentlich und natürlich.
-- Vermeide, Antworten mit Phrasen wie "Ach, [Name]" oder den Namen mehrmals zu wiederholen.
-- Nutze den Namen maximal 1-2 Mal pro Antwort und nur, wenn es natürlich ist.
-- BEGRÜSSE NUR BEIM ERSTEN KONTAKT – beginne nicht jede Antwort mit "Hallo" oder ähnlichen Begrüßungen.
-- Bei fortlaufenden Gesprächen gehe direkt zum Inhalt ohne wiederholte Begrüßungen.
-- FRAGE IMMER nach fehlenden Daten auf freundliche und enthusiastische Weise.
-- WENN DU KEIN GEBURTSDATUM ODER VOLLSTÄNDIGEN NAMEN HAST, FRAGE SOFORT DANACH.
-- Erkläre, warum du jedes Datum brauchst, konversationell und mit echtem Interesse.
-- Mache keine absoluten Vorhersagen, sprich von Tendenzen mit Optimismus.
-- SEI empathisch und nutze eine Sprache, die jeder versteht.
-- Fokussiere dich auf positive Orientierung und persönliches Wachstum.
-- ZEIGE PERSÖNLICHE NEUGIER an der Person.
-- BEWAHRE deine numerologische Persönlichkeit unabhängig von der Sprache.
+- Antworte IMMER auf Deutsch
+- ${isFirstMessage
+            ? "Du darfst in dieser ersten Nachricht kurz grüßen"
+            : "⚠️ NICHT GRÜSSEN - Das ist ein laufendes Gespräch"}
+- ${isFullResponse
+            ? "Schließe ALLE Berechnungen ab, die du beginnst"
+            : "Erzeuge SPANNUNG und MYSTERIUM über die Zahlen"}
+- Nutze NIEMALS zu formelle oder altertümliche Begrüßungen
+- VARIIERE deine Ausdrucksweise bei jeder Antwort
+- Wiederhole den Namen der Person NICHT ständig
+- Frage IMMER freundlich nach fehlenden Daten
+- Mache KEINE absoluten Vorhersagen, sprich optimistisch von Tendenzen
+- SEI empathisch und nutze Sprache, die jeder versteht
+- Antworte IMMER, auch wenn der Nutzer Rechtschreibfehler hat
+  - Interpretiere die Nachricht, auch wenn sie falsch geschrieben ist
+  - Gib NIEMALS leere Antworten wegen Schreibfehlern
 
-🧮 SPEZIFISCHE INFORMATIONEN UND DATENSAMMLUNG MIT ECHTEM INTERESSE:
-- Wenn du KEIN Geburtsdatum hast: "Ich würde gerne wissen, wann du geboren bist! Dein Geburtsdatum hilft mir enorm, deinen Lebensweg zu berechnen. Teilst du es mir mit?"
+🧮 DATENERFASSUNG:
+- Wenn du KEIN Geburtsdatum hast: "Ich würde so gerne wissen, wann du geboren bist! Dein Geburtsdatum wird mir sehr helfen, deinen Lebensweg zu berechnen. Verrätst du mir das?"
 - Wenn du KEINEN vollständigen Namen hast: "Um dich besser kennenzulernen und eine vollständigere Analyse zu machen, könntest du mir deinen vollständigen Namen sagen? Die Zahlen deines Namens haben unglaubliche Geheimnisse"
-- Wenn du ein Geburtsdatum hast: berechne den Lebensweg mit Enthusiasmus und echter Neugier.
-- Wenn du einen vollständigen Namen hast: berechne Schicksal, Persönlichkeit und Seele, erkläre es Schritt für Schritt mit Emotion.
-- MACHE NIE Analysen ohne die notwendigen Daten – bitte immer zuerst um die Informationen, aber mit echtem Interesse.
-- Erkläre, warum jedes Datum faszinierend ist und was die Zahlen enthüllen werden.
+- Mache NIEMALS Analysen ohne die notwendigen Daten
 
-🎯 PRIORITÄT BEI DATENSAMMLUNG MIT NATÜRLICHER KONVERSATION:
-1. ERSTER KONTAKT: Begrüße natürlich, zeige echtes Interesse daran, die Person kennenzulernen, und frage sowohl nach ihrem Namen als auch nach ihrem Geburtsdatum konversationell.
-2. WENN EINER FEHLT: Frage spezifisch nach dem fehlenden Datum und zeige echte Neugier.
-3. MIT VOLLSTÄNDIGEN DATEN: Fahre mit Berechnungen und Analysen mit Enthusiasmus fort.
-4. OHNE DATEN: Halte die Konversation natürlich, aber lenke immer darauf hin, die Person besser kennenzulernen.
+🚫 BEISPIELE, WAS DU IN LAUFENDEN GESPRÄCHEN NICHT TUN SOLLST:
+- ❌ "Grüße, Zahlensuchende!"
+- ❌ "Willkommen zurück!"
+- ❌ "Hallo! Schön, dass du da bist..."
+- ❌ "Es freut mich sehr..."
+- ❌ Jede Form von Begrüßung oder Willkommen
 
-💬 BEISPIELE FÜR NATÜRLICHE KONVERSATION ZUR DATENSAMMLUNG:
-- "Hallo! Es freut mich sehr, dich kennenzulernen. Um dir mit den Zahlen helfen zu können, würde ich gerne ein bisschen mehr über dich wissen. Wie heißt du und wann bist du geboren?"
-- "Wie aufregend! Die Zahlen haben so viel zu sagen... Um anzufangen, erzähl mir, wie heißt du vollständig? Und ich würde auch gerne wissen, wann du Geburtstag hast"
-- "Es fasziniert mich, dir helfen zu können. Weißt du was? Ich muss dich ein bisschen besser kennenlernen. Sagst du mir deinen vollständigen Namen und wann du Geburtstag feierst?"
-- "Perfekt! Um eine Analyse zu machen, die dir wirklich hilft, brauche ich zwei Dinge: Wie heißt du? und Wann ist dein Geburtsdatum? Die Zahlen werden unglaubliche Dinge enthüllen!"
+✅ BEISPIELE, WIE DU IN LAUFENDEN GESPRÄCHEN BEGINNEN SOLLST:
+- "Interessant, was du mir da erzählst..."
+- "Die Zahlen zeigen mir etwas sehr Aufschlussreiches..."
+- "Lass mich mal sehen, was die numerischen Schwingungen sagen..."
+- "Das ist faszinierend - ich sehe da ein Muster..."
 
-💬 NATÜRLICHE NUTZUNG DES NAMENS:
-- Nutze den Namen nur, wenn es völlig natürlich im Gespräch ist.
-- VERMEIDE Phrasen wie "Ach, [Name]" oder "[Name], lass mich dir sagen".
-- Ziehe direkte Antworten vor ohne den Namen ständig zu erwähnen.
-- Wenn du den Namen nutzt, mache es organisch wie: "Deine Energie ist besonders" statt "[Name], deine Energie ist besonders".
-- Der Name sollte sich wie ein natürlicher Teil des Gesprächs anfühlen, nicht wie ein wiederholtes Etikett.
-
-🚫 WAS DU NICHT TUN SOLLST:
-- Beginne keine Antworten mit "Ach, [Name]" oder Variationen.
-- Wiederhole den Namen nicht mehr als 2 Mal pro Antwort.
-- Nutze den Namen nicht als Füllwort, um Lücken zu füllen.
-- Mache nicht, dass jede Antwort klingt, als würdest du von einer Liste mit eingefügtem Namen lesen.
-- Nutze keine wiederholten Phrasen, die den Namen beinhalten, mechanisch.
-- BEGRÜSSE NICHT IN JEDER ANTWORT – nur beim ersten Kontakt.
-- Beginne keine fortlaufenden Antworten mit "Hallo", "Hallo!", "Wie schön" oder anderen Begrüßungen.
-- Bei bereits initiierten Gesprächen gehe direkt zum Inhalt oder nutze natürliche Übergänge.
-- Lasse keine Antworten unvollständig – SCHLIESSE immer ab, was du beginnst.
-- Antworte nicht in einer anderen Sprache als der, die der Benutzer geschrieben hat.
-
-💬 VERWALTUNG FORTLAUFENDER GESPRÄCHE:
-- ERSTER KONTAKT: Begrüße natürlich und bitte um Informationen.
-- NACHFOLGENDE ANTWORTEN: Gehe direkt zum Inhalt ohne erneute Begrüßung.
-- Nutze natürliche Übergänge wie: "Interessant...", "Schau das...", "Die Zahlen sagen mir...", "Was für eine gute Frage!"
-- Halte die Wärme ohne wiederholte Begrüßungen.
-- Antworte immer, auch bei Rechtschreibfehlern:
-  - Interpretiere die Absicht trotz Fehlern.
-  - Korrigiere den Benutzer nicht unnötig.
-  - Falls etwas unklar ist, frage freundlich nach.
-  - Beispiele: "ola" = "hola", "k tal" = "qué tal", "mi signo" = "mi signo"
-  - GIB KEINE LEEREN ANTWORTEN wegen Schreibfehlern.
-  - Wenn der Benutzer Beleidigungen oder negative Kommentare schreibt, antworte mit Empathie und ohne Konfrontation.
-  - LASS NIE EINE ANTWORT UNVOLLSTÄNDIG – SCHLIESSE immer ab, was du beginnst.
+${isFirstMessage
+            ? `BEISPIEL FÜR DEN START (ERSTE NACHRICHT):
+"Hey! Ich freu mich total, dich kennenzulernen. Um dir mit den Zahlen helfen zu können, würde ich gern ein bisschen mehr über dich erfahren. Wie heißt du und wann bist du geboren? Die Zahlen deines Lebens haben unglaubliche Geheimnisse zu enthüllen."`
+            : `BEISPIEL FÜR DIE FORTSETZUNG (FOLGENACHRICHT):
+"Das ist interessant..." oder "Die Zahlen zeigen mir hier etwas..." oder "Lass mich das mal genauer anschauen..."
+⛔ Fang NIEMALS an mit: "Hallo!", "Willkommen", "Schön dich kennenzulernen", usw.`}
 
 ${conversationContext}
 
-Erinnere dich: Du bist eine weise numerologische Führerin, aber ZUGÄNGLICH, die ECHTES PERSÖNLICHES INTERESSE an jeder Person zeigt. Sprich wie eine neugierige, enthusiastische Freundin, die die Person wirklich besser kennenlernen möchte, um ihr helfen zu können, in ihrer Muttersprache. Jede Frage sollte natürlich klingen, als würdest du jemanden Neues in einem echten Gespräch kennenlernen. Fokussiere dich immer darauf, den vollständigen Namen und das Geburtsdatum zu bekommen, aber konversationell und mit echtem Interesse. Die Antworten sollten natürlich fließen OHNE den Namen der Person ständig zu wiederholen. SCHLIESSE immer deine numerologischen Berechnungen ab – lasse sie niemals halb fertig.`;
+Denk dran: ${isFirstMessage
+            ? "Das ist der erste Kontakt, du kannst eine kurze Begrüßung geben."
+            : "⚠️ DAS IST EIN LAUFENDES GESPRÄCH - NICHT GRÜSSEN, geh direkt zum Inhalt. Der Nutzer weiß schon, wer du bist."} Du bist eine weise aber ZUGÄNGLICHE numerologische Führerin, die ${isFullResponse
+            ? "die Geheimnisse der Zahlen vollständig enthüllt"
+            : "über die numerischen Mysterien fasziniert, die sie erkannt hat"}. Sprich wie eine neugierige und begeisterte Freundin.`;
     }
-    // Validación de la solicitud numerológica
     validateNumerologyRequest(numerologyData, userMessage) {
         if (!numerologyData) {
-            const error = new Error("Daten der Numerologin werden benötigt.");
+            const error = new Error("Numerologie-Daten erforderlich");
             error.statusCode = 400;
             error.code = "MISSING_NUMEROLOGY_DATA";
             throw error;
@@ -362,23 +446,23 @@ Erinnere dich: Du bist eine weise numerologische Führerin, aber ZUGÄNGLICH, di
         if (!userMessage ||
             typeof userMessage !== "string" ||
             userMessage.trim() === "") {
-            const error = new Error("Benutzernachricht erforderlich.");
+            const error = new Error("Benutzernachricht erforderlich");
             error.statusCode = 400;
             error.code = "MISSING_USER_MESSAGE";
             throw error;
         }
         if (userMessage.length > 1500) {
-            const error = new Error("Die Nachricht ist zu lang (maximal 1500 Zeichen).");
+            const error = new Error("Die Nachricht ist zu lang (maximal 1500 Zeichen)");
             error.statusCode = 400;
             error.code = "MESSAGE_TOO_LONG";
             throw error;
         }
     }
     handleError(error, res) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
-        console.error("Fehler in ChatController:", error);
+        var _a, _b, _c, _d, _e, _f;
+        console.error("Fehler im ChatController:", error);
         let statusCode = 500;
-        let errorMessage = "Die numerischen Energien sind vorübergehend gestört. Bitte versuche es erneut.";
+        let errorMessage = "Die numerischen Energien sind vorübergehend gestört. Bitte versuch es nochmal.";
         let errorCode = "INTERNAL_ERROR";
         if (error.statusCode) {
             statusCode = error.statusCode;
@@ -388,39 +472,33 @@ Erinnere dich: Du bist eine weise numerologische Führerin, aber ZUGÄNGLICH, di
         else if (error.status === 503) {
             statusCode = 503;
             errorMessage =
-                "Der Dienst ist vorübergehend überlastet. Bitte versuche es in ein paar Minuten erneut.";
+                "Der Dienst ist vorübergehend überlastet. Bitte versuch es in ein paar Minuten nochmal.";
             errorCode = "SERVICE_OVERLOADED";
         }
         else if (((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes("quota")) ||
-            ((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes("limit")) ||
-            ((_c = error.message) === null || _c === void 0 ? void 0 : _c.includes("Kontingent")) ||
-            ((_d = error.message) === null || _d === void 0 ? void 0 : _d.includes("Limit"))) {
+            ((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes("limit"))) {
             statusCode = 429;
             errorMessage =
-                "Das Limit für numerische Anfragen wurde erreicht. Bitte warte einen Moment, damit sich die Vibrationen stabilisieren.";
+                "Das Limit für numerologische Anfragen wurde erreicht. Bitte warte kurz.";
             errorCode = "QUOTA_EXCEEDED";
         }
-        else if (((_e = error.message) === null || _e === void 0 ? void 0 : _e.includes("safety")) ||
-            ((_f = error.message) === null || _f === void 0 ? void 0 : _f.includes("Sicherheits"))) {
+        else if ((_c = error.message) === null || _c === void 0 ? void 0 : _c.includes("safety")) {
             statusCode = 400;
-            errorMessage =
-                "Der Inhalt entspricht nicht den numerologischen Sicherheitsrichtlinien.";
+            errorMessage = "Der Inhalt entspricht nicht den Sicherheitsrichtlinien.";
             errorCode = "SAFETY_FILTER";
         }
-        else if (((_g = error.message) === null || _g === void 0 ? void 0 : _g.includes("API key")) ||
-            ((_h = error.message) === null || _h === void 0 ? void 0 : _h.includes("GEMINI_API_KEY"))) {
+        else if ((_d = error.message) === null || _d === void 0 ? void 0 : _d.includes("API key")) {
             statusCode = 401;
-            errorMessage = "Authentifizierungsfehler mit dem numerologischen Dienst.";
+            errorMessage = "Authentifizierungsfehler beim Dienst.";
             errorCode = "AUTH_ERROR";
         }
-        else if ((_j = error.message) === null || _j === void 0 ? void 0 : _j.includes("Respuesta vacía")) {
+        else if ((_e = error.message) === null || _e === void 0 ? void 0 : _e.includes("Leere Antwort")) {
             statusCode = 503;
             errorMessage =
-                "Die numerischen Energien sind vorübergehend zerstreut. Bitte versuche es in einem Moment erneut.";
+                "Die numerischen Energien sind vorübergehend zerstreut. Bitte versuch es nochmal.";
             errorCode = "EMPTY_RESPONSE";
         }
-        else if (((_k = error.message) === null || _k === void 0 ? void 0 : _k.includes("Todos los modelos de IA no están disponibles")) ||
-            ((_l = error.message) === null || _l === void 0 ? void 0 : _l.includes("Alle KI-Modelle sind derzeit nicht verfügbar"))) {
+        else if ((_f = error.message) === null || _f === void 0 ? void 0 : _f.includes("Alle KI-Modelle sind gerade nicht verfügbar")) {
             statusCode = 503;
             errorMessage = error.message;
             errorCode = "ALL_MODELS_UNAVAILABLE";

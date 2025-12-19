@@ -6,19 +6,18 @@
     <title>Dokument</title>
   </head>
   <body>
-    <!-- Google Tag Manager (noscript) -->
     <div class="oracle-container">
-      <!-- Video de fondo -->
+      <!-- Hintergrundvideo -->
       <video autoplay muted loop playsinline class="background-video">
         <source src="/NUMEROLOGIA.mp4" type="video/mp4" />
-        Ihr Browser unterstützt keine HTML5-Videos.
+        Dein Browser unterstützt keine HTML5-Videos.
       </video>
 
-      <!-- Overlay opcional para mejorar legibilidad -->
+      <!-- Optionales Overlay zur Verbesserung der Lesbarkeit -->
       <div class="video-overlay"></div>
       <div class="content-with-navbar">
         <div class="oracle-main">
-          <!-- Información del numerólogo -->
+          <!-- Numerologen-Informationen -->
           <div class="interpreter-info">
             <div class="interpreter-avatar">
               <img
@@ -28,15 +27,13 @@
               />
             </div>
             <div class="interpreter-details">
-              <!-- Primera línea: nombre + icono + título juntos -->
+              <!-- Erste Zeile: Name + Symbol + Titel zusammen -->
               <div class="name-title-row">
                 <h3>{{ numerologistInfo.name }}</h3>
                 <span class="separator-icon">»</span>
-                <p class="interpreter-title">
-                  Wächterin der Heiligen Zahlen
-                </p>
+                <p class="interpreter-title">Hüterin der Heiligen Zahlen</p>
               </div>
-              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <!-- Zweite Zeile: Fachgebiet darunter IN GROSSBUCHSTABEN -->
               <p class="interpreter-specialty">
                 {{ numerologistInfo.specialty }}
               </p>
@@ -61,7 +58,7 @@
               </svg>
             </button>
           </div>
-          <!-- Área de conversación -->
+          <!-- Chatbereich -->
           <div class="chat-area">
             <div
               class="messages-container"
@@ -92,12 +89,12 @@
 
                 <div class="message-content">
                   <div class="message-bubble">
-                    <!-- CONTENIDO ORIGINAL (se difumina si está bloqueado) -->
+                    <!-- ORIGINALINHALT (wird unscharf, wenn gesperrt) -->
                     <div [class.blurred-content]="isMessageBlocked(message)">
                       <p [innerHTML]="formatMessage(message.message)"></p>
                     </div>
 
-                    <!-- OVERLAY DE PAGO (solo aparece si está bloqueado) -->
+                    <!-- ZAHLUNGS-OVERLAY (erscheint nur wenn gesperrt) -->
                     <div
                       *ngIf="isMessageBlocked(message)"
                       class="message-payment-overlay"
@@ -106,13 +103,14 @@
                         <span class="lock-icon">🔒</span>
                         <p><strong>Premium-Inhalt</strong></p>
                         <p>
-                          Zahle 4 €, um diese numerologische Interpretation zu sehen und auf unbegrenzte Lesungen zuzugreifen
+                          Zahle 4,00€ um diese numerologische Deutung zu sehen
+                          und unbegrenzten Zugang zu Lesungen zu erhalten
                         </p>
                         <button
                           (click)="promptForPayment()"
                           class="unlock-button"
                         >
-                          💳 Für 4 € freischalten
+                          💳 Für 4,00€ freischalten
                         </button>
                       </div>
                     </div>
@@ -124,7 +122,7 @@
                 </div>
               </div>
 
-              <!-- Indicador de escritura -->
+              <!-- Schreibanzeige -->
               <div
                 *ngIf="isTyping"
                 class="message interpreter-message typing-indicator"
@@ -145,21 +143,21 @@
                       <span></span>
                     </div>
                     <p class="typing-text">
-                      Meisterin Sofia konsultiert die heiligen Zahlen...
+                      Meisterin Sofia befragt die heiligen Zahlen...
                     </p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <!-- Área de entrada -->
+          <!-- Eingabebereich -->
           <div class="input-area">
             <div class="input-container">
               <div class="text-input-wrapper">
                 <textarea
                   class="message-input"
                   [(ngModel)]="currentMessage"
-                  placeholder="Frage zur Numerologie..."
+                  placeholder="Frage zur Numerologie stellen..."
                   rows="1"
                   maxlength="1500"
                   (keydown)="onKeyPress($event)"
@@ -173,7 +171,7 @@
                   class="clear-button"
                   (click)="clearConversation()"
                   [disabled]="isLoading"
-                  matTooltip="Neue Konsultation"
+                  matTooltip="Neue Beratung"
                 >
                   <i class="fas fa-redo"></i>
                 </button>
@@ -192,7 +190,7 @@
         </div>
       </div>
 
-      <!-- MODAL DE PAGO -->
+      <!-- ZAHLUNGS-MODAL -->
       <div *ngIf="showPaymentModal" class="payment-modal-overlay">
         <div class="payment-modal">
           <div class="payment-header">
@@ -204,22 +202,20 @@
 
           <div class="payment-content">
             <div class="payment-info">
-              <p>Erste kostenlose numerologische Konsultation abgeschlossen.</p>
-              <p>
-                Um die heiligen Zahlen unbegrenzt weiter zu erkunden:
-              </p>
+              <p>Erste kostenlose numerologische Beratung abgeschlossen.</p>
+              <p>Um die heiligen Zahlen unbegrenzt weiter zu erkunden:</p>
             </div>
 
             <div class="payment-price">
-              <span class="price-amount">4.00€</span>
+              <span class="price-amount">4,00€</span>
               <span class="price-description"
-                >Vollständiger Zugang zu numerologischen Interpretationen</span
+                >Vollständiger Zugang zu numerologischen Deutungen</span
               >
             </div>
 
             <div *ngIf="isProcessingPayment" class="payment-loading">
               <div class="loading-spinner"></div>
-              <p>Zahlungssystem vorbereiten...</p>
+              <p>Zahlungssystem wird vorbereitet...</p>
             </div>
 
             <div
@@ -227,7 +223,7 @@
               class="payment-element-container"
               [hidden]="isProcessingPayment"
             >
-              <!-- Stripe Payment Element se monta aquí -->
+              <!-- Stripe Payment Element wird hier eingebunden -->
             </div>
 
             <div *ngIf="paymentError" class="payment-error">
@@ -240,8 +236,10 @@
                 [disabled]="isProcessingPayment"
                 class="pay-button"
               >
-                <span *ngIf="!isProcessingPayment">💳 Bezahlen und Fortfahren</span>
-                <span *ngIf="isProcessingPayment">Verarbeitung...</span>
+                <span *ngIf="!isProcessingPayment"
+                  >💳 Bezahlen und fortfahren</span
+                >
+                <span *ngIf="isProcessingPayment">Wird verarbeitet...</span>
               </button>
             </div>
           </div>
@@ -253,13 +251,6 @@
         (onModalClosed)="onDataModalClosed()"
       >
       </app-recolecta-datos>
-      <app-fortune-wheel
-        [isVisible]="showFortuneWheel"
-        [prizes]="numerologyPrizes"
-        (onPrizeWon)="onPrizeWon($event)"
-        (onWheelClosed)="onWheelClosed()"
-      >
-      </app-fortune-wheel>
     </div>
   </body>
 </html>

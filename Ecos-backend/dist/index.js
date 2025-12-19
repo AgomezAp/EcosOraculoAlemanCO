@@ -48,65 +48,66 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 // Cargar variables de entorno
 dotenv_1.default.config();
-console.log('==========================================');
-console.log('📋 Configuración:');
-console.log('  - Puerto:', process.env.PORT || 3001);
-console.log('  - Frontend URL:', process.env.FRONTEND_URL || 'http://localhost:4200');
-console.log('  - Backend URL:', process.env.BACKEND_URL || 'http://localhost:3010');
-console.log('  - Gemini API Key:', process.env.GEMINI_API_KEY ? '✅ Configurada' : '❌ No encontrada');
-console.log('  - Node ENV:', process.env.NODE_ENV || 'development');
-console.log('  - PayPal Client ID:', process.env.PAYPAL_API_CLIENT ? '✅ Configurada' : '❌ No encontrada');
-console.log('  - PayPal Secret:', process.env.PAYPAL_API_SECRET ? '✅ Configurada' : '❌ No encontrada');
-console.log('  - PayPal API:', process.env.PAYPAL_API || '❌ No encontrada');
-console.log('  - JWT Secret:', process.env.JWT_SECRET_KEY ? '✅ Configurada' : '❌ No encontrada');
-console.log('==========================================');
+console.log("==========================================");
+console.log("📋 Configuración:");
+console.log("  - Puerto:", process.env.PORT || 3001);
+console.log("  - Frontend URL:", process.env.FRONTEND_URL || "http://localhost:4200");
+console.log("  - Backend URL:", process.env.BACKEND_URL || "http://localhost:3010");
+console.log("  - Gemini API Key:", process.env.GEMINI_API_KEY ? "✅ Configurada" : "❌ No encontrada");
+console.log("  - Node ENV:", process.env.NODE_ENV || "development");
+console.log("  - PayPal Client ID:", process.env.PAYPAL_API_CLIENT ? "✅ Configurada" : "❌ No encontrada");
+console.log("  - PayPal Secret:", process.env.PAYPAL_API_SECRET ? "✅ Configurada" : "❌ No encontrada");
+console.log("  - PayPal API:", process.env.PAYPAL_API || "❌ No encontrada");
+console.log("  - JWT Secret:", process.env.JWT_SECRET_KEY ? "✅ Configurada" : "❌ No encontrada");
+console.log("==========================================");
 // Verificar que las dependencias críticas están disponibles
 try {
-    console.log('📦 Verificando dependencias...');
+    console.log("📦 Verificando dependencias...");
     // Verificar Express
-    require('express');
-    console.log('  ✅ Express disponible');
+    require("express");
+    console.log("  ✅ Express disponible");
     // Verificar CORS
-    require('cors');
-    console.log('  ✅ CORS disponible');
+    require("cors");
+    console.log("  ✅ CORS disponible");
     // Verificar Gemini AI
-    require('@google/generative-ai');
-    console.log('  ✅ Google Generative AI disponible');
-    console.log('📦 Todas las dependencias verificadas');
+    require("@google/generative-ai");
+    console.log("  ✅ Google Generative AI disponible");
+    console.log("📦 Todas las dependencias verificadas");
 }
 catch (error) {
-    console.error('❌ Error verificando dependencias:', error);
+    console.error("❌ Error verificando dependencias:", error);
     process.exit(1);
 }
 // Función async para manejar la importación del servidor
 function startServer() {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log('🚀 Iniciando servidor Express...');
+        console.log("🚀 Iniciando servidor Express...");
         try {
-            yield Promise.resolve().then(() => __importStar(require('./models/server')));
-            console.log('✅ Servidor iniciado correctamente');
+            yield Promise.resolve().then(() => __importStar(require("./models/server")));
+            console.log("✅ Servidor iniciado correctamente");
         }
         catch (error) {
-            console.error('❌ Error al importar server:', error);
-            console.error('💡 Revisa las rutas en ./models/server.ts');
-            if (error instanceof Error && error.message.includes('Missing parameter name')) {
-                console.error('💡 Este error es causado por una ruta mal definida. Revisa tus rutas en busca de:');
-                console.error('   - Parámetros vacíos: /api/:');
-                console.error('   - Dobles dos puntos: /api/::id');
-                console.error('   - Caracteres especiales: /api/:id-');
-                console.error('   - Espacios después de : en rutas: /api/: id');
+            console.error("❌ Error al importar server:", error);
+            console.error("💡 Revisa las rutas en ./models/server.ts");
+            if (error instanceof Error &&
+                error.message.includes("Missing parameter name")) {
+                console.error("💡 Este error es causado por una ruta mal definida. Revisa tus rutas en busca de:");
+                console.error("   - Parámetros vacíos: /api/:");
+                console.error("   - Dobles dos puntos: /api/::id");
+                console.error("   - Caracteres especiales: /api/:id-");
+                console.error("   - Espacios después de : en rutas: /api/: id");
             }
             process.exit(1);
         }
     });
 }
 // Manejar errores no capturados
-process.on('uncaughtException', (error) => {
-    console.error('❌ Error no capturado:', error);
+process.on("uncaughtException", (error) => {
+    console.error("❌ Error no capturado:", error);
     process.exit(1);
 });
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Promise rechazada no manejada:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+    console.error("❌ Promise rechazada no manejada:", reason);
     process.exit(1);
 });
 // Iniciar el servidor

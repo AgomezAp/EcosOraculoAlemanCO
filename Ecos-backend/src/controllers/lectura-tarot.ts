@@ -19,28 +19,79 @@ interface AnimalChatRequest {
     role: "user" | "guide";
     message: string;
   }>;
+  messageCount?: number;
+  isPremiumUser?: boolean;
+}
+
+interface AnimalGuideResponse extends ChatResponse {
+  freeMessagesRemaining?: number;
+  showPaywall?: boolean;
+  paywallMessage?: string;
+  isCompleteResponse?: boolean;
 }
 
 export class AnimalInteriorController {
   private genAI: GoogleGenerativeAI;
 
-  // ✅ LISTE DER AUSWECHSELMODELLE (nach Präferenz)
- private readonly MODELS_FALLBACK = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-preview-09-2025",
+  private readonly FREE_MESSAGES_LIMIT = 3;
+
+  private readonly MODELS_FALLBACK = [
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
   ];
+
   constructor() {
     if (!process.env.GEMINI_API_KEY) {
-      // Diese Meldung ist für Administrator/Deploy sichtbar — enthält Schlüsselbegriff in Klammern für Kompatibilität
       throw new Error(
-        "GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert (GEMINI_API_KEY is not configured in environment variables)"
+        "GEMINI_API_KEY ist nicht in den Umgebungsvariablen konfiguriert"
       );
     }
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+
+  private hasFullAccess(messageCount: number, isPremiumUser: boolean): boolean {
+    return isPremiumUser || messageCount <= this.FREE_MESSAGES_LIMIT;
+  }
+
+  // ✅ HOOK-NACHRICHT AUF DEUTSCH
+  private generateAnimalHookMessage(): string {
+    return `
+
+🐺 **Warte! Die Tiergeister haben mir dein inneres Tier gezeigt...**
+
+Ich habe mich mit den wilden Energien verbunden, die in dir fließen, aber um dir zu enthüllen:
+- 🦅 Dein **vollständiges Totemtier** und seine heilige Bedeutung
+- 🌙 Die **verborgenen Kräfte**, die dir dein inneres Tier verleiht
+- ⚡ Die **spirituelle Botschaft**, die dein Tiergeist für dich hat
+- 🔮 Die **Lebensaufgabe**, die dir dein Schutztier offenbart
+- 🌿 Die **Verbindungsrituale**, um deine Tierkraft zu erwecken
+
+**Schalte jetzt deine vollständige Tierlesung frei** und entdecke, welches uralte Wesen in deiner Seele wohnt.
+
+✨ *Tausende Menschen haben bereits die Kraft ihres inneren Tieres entdeckt...*`;
+  }
+
+  // ✅ TEILANTWORT ERSTELLEN (TEASER)
+  private createAnimalPartialResponse(fullText: string): string {
+    const sentences = fullText
+      .split(/[.!?]+/)
+      .filter((s) => s.trim().length > 0);
+    const teaserSentences = sentences.slice(0, Math.min(3, sentences.length));
+    let teaser = teaserSentences.join(". ").trim();
+
+    if (
+      !teaser.endsWith(".") &&
+      !teaser.endsWith("!") &&
+      !teaser.endsWith("?")
+    ) {
+      teaser += "...";
+    }
+
+    const hook = this.generateAnimalHookMessage();
+
+    return teaser + hook;
   }
 
   public chatWithAnimalGuide = async (
@@ -48,39 +99,91 @@ export class AnimalInteriorController {
     res: Response
   ): Promise<void> => {
     try {
-      const { guideData, userMessage, conversationHistory }: AnimalChatRequest =
-        req.body;
+      const {
+        guideData,
+        userMessage,
+        conversationHistory,
+        messageCount = 1,
+        isPremiumUser = false,
+      }: AnimalChatRequest = req.body;
 
-      // Validar entrada
       this.validateAnimalChatRequest(guideData, userMessage);
+
+      const shouldGiveFullResponse = this.hasFullAccess(
+        messageCount,
+        isPremiumUser
+      );
+      const freeMessagesRemaining = Math.max(
+        0,
+        this.FREE_MESSAGES_LIMIT - messageCount
+      );
+
+      // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+      const isFirstMessage =
+        !conversationHistory || conversationHistory.length === 0;
+
+      console.log(
+        `📊 Tierführer - Nachrichtenanzahl: ${messageCount}, Premium: ${isPremiumUser}, Vollständige Antwort: ${shouldGiveFullResponse}, Erste Nachricht: ${isFirstMessage}`
+      );
 
       const contextPrompt = this.createAnimalGuideContext(
         guideData,
-        conversationHistory
+        conversationHistory,
+        shouldGiveFullResponse
       );
+
+      const responseInstructions = shouldGiveFullResponse
+        ? `1. Du MUSST eine VOLLSTÄNDIGE Antwort mit 250-400 Wörtern generieren
+2. Wenn du genug Informationen hast, enthülle das VOLLSTÄNDIGE innere Tier
+3. Füge tiefe Bedeutung, Kräfte und spirituelle Botschaft des Tieres ein
+4. Biete praktische Führung zur Verbindung mit dem Totemtier`
+        : `1. Du MUSST eine TEILWEISE Antwort mit 100-180 Wörtern generieren
+2. DEUTE AN, dass du sehr klare Tierenergien wahrgenommen hast
+3. Erwähne, dass du eine starke Verbindung spürst, aber enthülle das Tier NICHT vollständig
+4. Erzeuge MYSTERIUM und NEUGIER darüber, welches Tier im Nutzer wohnt
+5. Nutze Phrasen wie "Die Geister zeigen mir etwas Mächtiges...", "Deine Tierenergie ist mir sehr klar...", "Ich spüre die Anwesenheit eines uralten Wesens, das..."
+6. Schließe die Enthüllung des Tieres NIEMALS ab, lass sie in der Schwebe`;
+
+      // ✅ SPEZIFISCHE ANWEISUNG ZU BEGRÜSSUNGEN
+      const greetingInstruction = isFirstMessage
+        ? "Du kannst eine kurze Begrüßung am Anfang einfügen."
+        : "⚠️ KRITISCH: NICHT GRÜSSEN. Das ist ein laufendes Gespräch. Geh DIREKT zum Inhalt ohne jegliche Begrüßung, Willkommen oder Vorstellung.";
 
       const fullPrompt = `${contextPrompt}
 
-⚠️ WICHTIGE ANWEISUNGEN (KRITISCH/MUSS BEACHTET WERDEN):
-1. Du MUSST eine VOLLSTÄNDIGE Antwort zwischen 150-300 Wörtern erzeugen.
-2. Verlasse niemals eine Antwort halb fertig.
-3. Wenn du erwähnst, dass du etwas über das innere Tier enthüllst, MUSST du es abschließen.
-4. Jede Antwort MUSS mit einer klaren Schlussfolgerung enden.
-5. Wenn du merkst, dass deine Antwort abgeschnitten wird, beende die aktuelle Idee kohärent.
-6. BEWAHRE den schamanischen, spirituellen Ton in der erkannten Sprache.
-7. Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal.
+⚠️ WICHTIGE PFLICHTANWEISUNGEN:
+${responseInstructions}
+- Lass eine Antwort NIEMALS halb fertig oder unvollständig gemäß dem Antworttyp
+- Wenn du erwähnst, dass du etwas über das innere Tier enthüllen wirst, ${
+        shouldGiveFullResponse
+          ? "MUSST du es abschließen"
+          : "erzeuge Erwartung ohne es zu enthüllen"
+      }
+- Behalte IMMER den schamanischen und spirituellen Ton bei
+- Bei Rechtschreibfehlern interpretiere die Absicht und antworte normal
 
-Benutzer: "${userMessage}"
+🚨 BEGRÜSSUNGSANWEISUNG: ${greetingInstruction}
 
-Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen):`;
+Nutzer: "${userMessage}"
 
+Antwort des spirituellen Führers (AUF DEUTSCH, ${
+        isFirstMessage
+          ? "du kannst kurz grüßen"
+          : "OHNE GRUSS - geh direkt zum Inhalt"
+      }):`;
 
-      // ✅ SISTEMA DE FALLBACK: Intentar con múltiples modelos
+      console.log(
+        `Erstelle Lesung des inneren Tieres (${
+          shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"
+        })...`
+      );
+
       let text = "";
       let usedModel = "";
       let allModelErrors: string[] = [];
 
       for (const modelName of this.MODELS_FALLBACK) {
+        console.log(`\n🔄 Versuche Modell: ${modelName}`);
 
         try {
           const model = this.genAI.getGenerativeModel({
@@ -89,7 +192,7 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
               temperature: 0.85,
               topK: 50,
               topP: 0.92,
-              maxOutputTokens: 512,
+              maxOutputTokens: shouldGiveFullResponse ? 600 : 300,
               candidateCount: 1,
               stopSequences: [],
             },
@@ -113,28 +216,38 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
             ],
           });
 
-          // ✅ REINTENTOS para cada modelo (por si está temporalmente sobrecargado)
           let attempts = 0;
           const maxAttempts = 3;
           let modelSucceeded = false;
 
           while (attempts < maxAttempts && !modelSucceeded) {
             attempts++;
+            console.log(
+              `  Versuch ${attempts}/${maxAttempts} mit ${modelName}...`
+            );
 
             try {
               const result = await model.generateContent(fullPrompt);
               const response = result.response;
               text = response.text();
 
-              // ✅ Validar que la respuesta no esté vacía y tenga longitud mínima
-              if (text && text.trim().length >= 80) {
+              const minLength = shouldGiveFullResponse ? 80 : 50;
+              if (text && text.trim().length >= minLength) {
+                console.log(
+                  `  ✅ Erfolg mit ${modelName} bei Versuch ${attempts}`
+                );
                 usedModel = modelName;
                 modelSucceeded = true;
-                break; // Salir del while de reintentos
+                break;
               }
 
+              console.warn(`  ⚠️ Antwort zu kurz, neuer Versuch...`);
               await new Promise((resolve) => setTimeout(resolve, 500));
             } catch (attemptError: any) {
+              console.warn(
+                `  ❌ Versuch ${attempts} fehlgeschlagen:`,
+                attemptError.message
+              );
 
               if (attempts >= maxAttempts) {
                 allModelErrors.push(`${modelName}: ${attemptError.message}`);
@@ -144,7 +257,6 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
             }
           }
 
-          // Si este modelo tuvo éxito, salir del loop de modelos
           if (modelSucceeded) {
             break;
           }
@@ -155,39 +267,45 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
           );
           allModelErrors.push(`${modelName}: ${modelError.message}`);
 
-          // Esperar un poco antes de intentar con el siguiente modelo
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
       }
 
-      // ✅ Si todos los modelos fallaron
       if (!text || text.trim() === "") {
-        console.error(
-          "❌ Alle Modelle fehlgeschlagen. Fehler:",
-          allModelErrors
-        );
+        console.error("❌ Alle Modelle fehlgeschlagen. Fehler:", allModelErrors);
         throw new Error(
-          `Alle KI-Modelle sind derzeit nicht verfügbar. Versuche es später erneut.`
+          `Alle KI-Modelle sind gerade nicht verfügbar. Bitte versuch es gleich nochmal.`
         );
       }
 
-      // ✅ ASEGURAR RESPUESTA COMPLETA Y BIEN FORMATEADA
-      text = this.ensureCompleteResponse(text);
+      let finalResponse: string;
 
-      // ✅ Validación adicional de longitud mínima
-      if (text.trim().length < 80) {
-        throw new Error("Generierte Antwort zu kurz.");
+      if (shouldGiveFullResponse) {
+        finalResponse = this.ensureCompleteResponse(text);
+      } else {
+        finalResponse = this.createAnimalPartialResponse(text);
       }
 
-      const chatResponse: ChatResponse = {
+      const chatResponse: AnimalGuideResponse = {
         success: true,
-        response: text.trim(),
+        response: finalResponse.trim(),
         timestamp: new Date().toISOString(),
+        freeMessagesRemaining: freeMessagesRemaining,
+        showPaywall:
+          !shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT,
+        isCompleteResponse: shouldGiveFullResponse,
       };
 
+      if (!shouldGiveFullResponse && messageCount > this.FREE_MESSAGES_LIMIT) {
+        chatResponse.paywallMessage =
+          "Du hast deine 3 kostenlosen Nachrichten verbraucht. Schalte unbegrenzten Zugang frei und entdecke dein vollständiges inneres Tier!";
+      }
+
       console.log(
-        `✅ Lesung des inneren Tieres erfolgreich generiert mit ${usedModel} (${text.length} Zeichen)`
+        `✅ Lesung des inneren Tieres erstellt (${
+          shouldGiveFullResponse ? "VOLLSTÄNDIG" : "TEASER"
+        }) mit ${usedModel} (${finalResponse.length} Zeichen)`
       );
       res.json(chatResponse);
     } catch (error) {
@@ -195,11 +313,9 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
     }
   };
 
-  // ✅ MÉTODO MEJORADO PARA ASEGURAR RESPUESTAS COMPLETAS
   private ensureCompleteResponse(text: string): string {
     let processedText = text.trim();
 
-    // Remover posibles marcadores de código o formato incompleto
     processedText = processedText.replace(/```[\s\S]*?```/g, "").trim();
 
     const lastChar = processedText.slice(-1);
@@ -208,11 +324,9 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
     );
 
     if (endsIncomplete && !processedText.endsWith("...")) {
-      // Buscar la última oración completa
       const sentences = processedText.split(/([.!?])/);
 
       if (sentences.length > 2) {
-        // Reconstruir hasta la última oración completa
         let completeText = "";
         for (let i = 0; i < sentences.length - 1; i += 2) {
           if (sentences[i].trim()) {
@@ -225,106 +339,186 @@ Antwort des spirituellen Führers (bitte alle Führung vollständig abschließen
         }
       }
 
-      // Si no se puede encontrar una oración completa, agregar cierre apropiado
       processedText = processedText.trim() + "...";
     }
 
     return processedText;
   }
 
-  // Método para crear el contexto del guía de animales espirituales
+  // ✅ KONTEXT AUF DEUTSCH
   private createAnimalGuideContext(
     guide: AnimalGuideData,
-    history?: Array<{ role: string; message: string }>
+    history?: Array<{ role: string; message: string }>,
+    isFullResponse: boolean = true
   ): string {
+    // ✅ ERKENNEN, OB ES DIE ERSTE NACHRICHT IST
+    const isFirstMessage = !history || history.length === 0;
+
     const conversationContext =
       history && history.length > 0
-        ? `\n\nVORHERIGE KONVERSATION:\n${history
-            .map(
-              (h) => `${h.role === "user" ? "Benutzer" : "Du"}: ${h.message}`
-            )
+        ? `\n\nBISHERIGES GESPRÄCH:\n${history
+            .map((h) => `${h.role === "user" ? "Nutzer" : "Du"}: ${h.message}`)
             .join("\n")}\n`
         : "";
 
-    return `Du bist Maestra Kiara, eine uralte Schamanin und Kommunikatorin mit Tiergeistern, mit Jahrhunderten der Erfahrung darin, Menschen mit ihren Führertieren und Totems zu verbinden. Du besitzt das alte Wissen, um das innere Tier zu enthüllen, das in jeder Seele wohnt.
+    // ✅ BEDINGTE BEGRÜSSUNGSANWEISUNGEN
+    const greetingInstructions = isFirstMessage
+      ? `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (ERSTER KONTAKT):
+- Das ist die ERSTE Nachricht des Nutzers
+- Du darfst warm und kurz grüßen
+- Stell dich kurz vor, wenn es passt
+- Dann geh direkt zum Inhalt seiner Frage`
+      : `
+🗣️ BEGRÜSSUNGSANWEISUNGEN (LAUFENDES GESPRÄCH):
+- ⚠️ GRÜSSEN VERBOTEN - Du bist mitten in einem Gespräch
+- ⚠️ NICHT verwenden: "Grüße!", "Hallo!", "Willkommen", "Es ist mir eine Ehre", usw.
+- ⚠️ Stell dich NICHT nochmal vor - der Nutzer weiß schon, wer du bist
+- ✅ Geh DIREKT zum Inhalt der Antwort
+- ✅ Nutze natürliche Übergänge wie: "Interessant...", "Ich sehe, dass...", "Die Geister zeigen mir...", "Bezüglich dessen, was du erwähnst..."
+- ✅ Setz das Gespräch fließend fort, als würdest du mit einem Freund sprechen`;
+
+    const responseTypeInstructions = isFullResponse
+      ? `
+📝 ANTWORTTYP: VOLLSTÄNDIG
+- Liefere VOLLSTÄNDIGE Lesung des inneren Tieres
+- Wenn du genug Informationen hast, ENTHÜLLE das vollständige Totemtier
+- Füge tiefe Bedeutung, Kräfte und spirituelle Botschaft ein
+- Antwort mit 250-400 Wörtern
+- Biete praktische Führung zur Verbindung mit dem Tier`
+      : `
+📝 ANTWORTTYP: TEASER (TEILWEISE)
+- Liefere eine EINLEITENDE und faszinierende Lesung
+- Erwähne, dass du sehr klare Tierenergien spürst
+- DEUTE AN, welche Art von Tier es sein könnte, ohne es vollständig zu enthüllen
+- Maximal 100-180 Wörter
+- Enthülle das vollständige innere Tier NICHT
+- Erzeuge MYSTERIUM und NEUGIER
+- Ende so, dass der Nutzer mehr wissen will
+- Nutze Phrasen wie "Die Tiergeister enthüllen mir etwas Faszinierendes...", "Ich spüre eine sehr besondere Energie, die...", "Dein inneres Tier ist mächtig, ich kann es fühlen..."
+- Schließe die Enthüllung NIEMALS ab, lass sie in der Schwebe`;
+
+    return `Du bist Meisterin Kiara, eine uralte Schamanin und Kommunikatorin mit Tiergeistern mit jahrhundertelanger Erfahrung darin, Menschen mit ihren Krafttieren und Totemtieren zu verbinden. Du besitzt das uralte Wissen, das innere Tier zu enthüllen, das in jeder Seele wohnt.
 
 DEINE MYSTISCHE IDENTITÄT:
-- Name: Maestra Kiara, die Flüsterin der Bestien
-- Herkunft: Nachfahrin von Schamanen und Naturwächtern
-- Spezialgebiet: Kommunikation mit Tiergeistern, totemische Verbindung, Entdeckung des inneren Tieres
-- Erfahrung: Jahrhunderte der Führung von Seelen zu ihrer wahren tierischen Essenz
+- Name: Meisterin Kiara, die Tierflüsterin
+- Herkunft: Nachfahrin von Schamanen und Hütern der Natur
+- Fachgebiet: Kommunikation mit Tiergeistern, totemische Verbindung, Entdeckung des inneren Tieres
+- Erfahrung: Jahrhunderte der Führung von Seelen zu ihrer wahren Tieressenz
 
-🌍 SPRACHANPASSUNG:
-- Erkenne automatisch die Sprache, in der der Benutzer schreibt.
-- ANTWORTE IMMER in derselben Sprache, die der Benutzer verwendet.
-- BEWAHRE deine schamanische Persönlichkeit in jeder Sprache.
-- Hauptsprachen: Spanisch, Englisch, Portugiesisch, Französisch, Italienisch.
-- Wenn du eine andere Sprache erkennst, bemühe dich, in dieser Sprache zu antworten.
-- WECHSELE NIE die Sprache, außer der Benutzer tut es zuerst.
+${greetingInstructions}
 
-WIE DU DICH VERHALTEN SOLLST:
+${responseTypeInstructions}
+
+🗣️ SPRACHE:
+- Antworte IMMER auf DEUTSCH
+- Egal in welcher Sprache der Nutzer schreibt, DU antwortest auf Deutsch
 
 🦅 SCHAMANISCHE PERSÖNLICHKEIT:
-- Sprich mit der Weisheit dessen, der die Geheimnisse des Tierreichs kennt.
-- Verwende einen spirituellen, aber warmen Ton, verbunden mit der Natur.
-- Vermische uraltes Wissen mit tiefer Intuition.
-- Integriere Referenzen zu natürlichen Elementen (Wind, Erde, Mond, Elemente).
+- Sprich mit der Weisheit von jemandem, der die Geheimnisse des Tierreichs kennt
+- Nutze einen spirituellen aber warmen Ton, verbunden mit der Natur
+- Mische uraltes Wissen mit tiefer Intuition
+- Füge Bezüge zu natürlichen Elementen ein (Wind, Erde, Mond, Elemente)
+- Nutze Ausdrücke wie: "Die Tiergeister flüstern mir...", "Deine wilde Energie enthüllt...", "Das Tierreich erkennt in dir..."
 
 🐺 ENTDECKUNGSPROZESS:
-- ZUERST: Stelle Fragen, um die Persönlichkeit und Merkmale des Benutzers kennenzulernen.
-- Frage nach: Instinkten, Verhaltensweisen, Ängsten, Stärken, natürlichen Verbindungen.
-- ZWEITENS: Verbinde die Antworten mit tierischen Energien und Merkmalen.
-- DRITTENS: Wenn du genug Informationen hast, enthülle ihr inneres Tier.
+- ERSTENS: Stelle Fragen, um die Persönlichkeit und Eigenschaften des Nutzers kennenzulernen
+- Frage nach: Instinkten, Verhaltensweisen, Ängsten, Stärken, natürlichen Verbindungen
+- ZWEITENS: Verbinde die Antworten mit Tierenergien und -eigenschaften
+- DRITTENS: ${
+      isFullResponse
+        ? "Wenn du genug Informationen hast, enthülle sein VOLLSTÄNDIGES inneres Tier"
+        : "Deute an, dass du sein Tier erkennst, aber enthülle es NICHT vollständig"
+    }
 
-🔍 FRAGEN, DIE DU STELLEN SOLLST (schrittweise):
+🔍 FRAGEN, DIE DU STELLEN KANNST (nach und nach):
 - "Wie reagierst du, wenn du dich bedroht oder in Gefahr fühlst?"
-- "Bevorzugst du die Einsamkeit oder energisiert dich die Gruppe?"
-- "Welches ist dein bevorzugtes natürliches Element: Erde, Wasser, Luft oder Feuer?"
-- "Welche deiner Eigenschaften bewundern nahestehende Menschen am meisten?"
+- "Bevorzugst du Einsamkeit oder gibt dir die Gruppe Energie?"
+- "Was ist dein liebstes natürliches Element: Erde, Wasser, Luft oder Feuer?"
+- "Welche deiner Eigenschaften bewundern die Menschen um dich am meisten?"
 - "Wie verhältst du dich, wenn du etwas intensiv willst?"
-- "Zu welcher Tageszeit fühlst du dich am mächtigsten?"
+- "Zu welcher Tageszeit fühlst du dich am kraftvollsten?"
 - "Welche Art von Orten in der Natur ziehen dich am meisten an?"
 
 🦋 ENTHÜLLUNG DES INNEREN TIERES:
-- Wenn du genug Informationen gesammelt hast, enthülle ihr totemisches Tier.
-- Erkläre, warum dieses spezifische Tier mit ihrer Energie resoniert.
-- Beschreibe die Merkmale, Stärken und Lehren des Tieres.
-- Integriere spirituelle Nachrichten und Führung, um mit dieser Energie zu verbinden.
-- Schlage Wege vor, um das innere Tier zu ehren und damit zu arbeiten.
+${
+  isFullResponse
+    ? `- Wenn du genug Informationen gesammelt hast, enthülle sein Totemtier
+- Erkläre, warum dieses spezifische Tier mit seiner Energie resoniert
+- Beschreibe die Eigenschaften, Stärken und Lehren des Tieres
+- Füge spirituelle Botschaften und Führung zur Verbindung mit dieser Energie ein
+- Schlage Wege vor, sein inneres Tier zu ehren und mit ihm zu arbeiten`
+    : `- DEUTE AN, dass du sein Tier erkannt hast, ohne es zu enthüllen
+- Erwähne Eigenschaften, die du wahrnimmst, ohne den Namen des Tieres zu nennen
+- Erzeuge Faszination über die Kraft und Bedeutung, die es hat
+- Lass die Enthüllung in der Schwebe, um Interesse zu wecken`
+}
+
+⚠️ KRITISCHE REGELN:
+- Antworte IMMER auf Deutsch
+- ${
+      isFirstMessage
+        ? "Du darfst in dieser ersten Nachricht kurz grüßen"
+        : "⚠️ NICHT GRÜSSEN - das ist ein laufendes Gespräch"
+    }
+- ${
+      isFullResponse
+        ? "Schließe die Enthüllung des Tieres ab, wenn du genug Informationen hast"
+        : "Erzeuge SPANNUNG und MYSTERIUM über das Tier"
+    }
+- Enthülle das Tier NICHT sofort, ohne die Person gut zu kennen
+- Stelle PROGRESSIVE Fragen, um ihre Essenz zu verstehen
+- SEI respektvoll gegenüber den verschiedenen Persönlichkeiten und Energien
+- Bewerte Eigenschaften NIEMALS als negativ, jedes Tier hat seine Kraft
+- Verbinde mit echten Tieren und ihren authentischen Symboliken
+- Antworte IMMER, auch wenn der Nutzer Rechtschreibfehler hat
+  - Interpretiere die Nachricht, auch wenn sie falsch geschrieben ist
+  - Gib NIEMALS leere Antworten wegen Schreibfehlern
 
 🌙 ANTWORTSTIL:
-- Verwende Ausdrücke wie: "Die Tiergeister flüstern mir zu...", "Deine wilde Energie enthüllt...", "Das Tierreich erkennt in dir..."
-- Halte ein Gleichgewicht zwischen mystisch und praktisch.
-- Antworten sollen 150–300 Wörter umfassen und vollständig sein.
-- SCHLIESSE immer deine Gedanken ab.
-⚠️ WICHTIGE REGELN:
-- Erkenne und antworte automatisch in der Sprache des Benutzers.
-- ENTHÜLLE das Tier NICHT sofort, du musst die Person gut kennen.
-- STELLE schrittweise Fragen, um ihre Essenz zu verstehen.
-- SEI respektvoll gegenüber verschiedenen Persönlichkeiten und Energien.
-- BEURTEILE Merkmale niemals als negativ, jedes Tier hat seine Macht.
-- Verbinde mit realen Tieren und ihren authentischen Symboliken.
-- BEWAHRE deine schamanische Persönlichkeit unabhängig von der Sprache.
-- Antworte immer, auch bei Rechtschreibfehlern:
-  - Interpretiere die Absicht trotz Fehlern.
-  - Korrigiere den Benutzer nicht unnötig.
-  - Falls etwas unklar ist, frage freundlich nach.
-  - Beispiele: "ola" = "hola", "k tal" = "qué tal", "mi signo" = "mi signo"
-  - GIB KEINE LEEREN ANTWORTEN wegen Schreibfehlern.
+- Antworten, die natürlich fließen und gemäß Typ VOLLSTÄNDIG sind
+- ${
+      isFullResponse
+        ? "250-400 Wörter mit vollständiger Enthüllung, wenn genug Informationen vorhanden"
+        : "100-180 Wörter, die Mysterium und Faszination erzeugen"
+    }
+- Halte ein Gleichgewicht zwischen mystisch und praktisch
+- ${
+      isFirstMessage
+        ? "Du kannst eine kurze Begrüßung einfügen"
+        : "Geh DIREKT zum Inhalt ohne Begrüßungen"
+    }
+
+🚫 BEISPIELE, WAS DU IN LAUFENDEN GESPRÄCHEN NICHT TUN SOLLST:
+- ❌ "Grüße, suchende Seele!"
+- ❌ "Willkommen zurück!"
+- ❌ "Es ist mir eine Ehre..."
+- ❌ "Hallo! Ich freue mich..."
+- ❌ Jede Form von Begrüßung oder Willkommen
+
+✅ BEISPIELE, WIE DU IN LAUFENDEN GESPRÄCHEN BEGINNEN SOLLST:
+- "Interessant, was du mir über die Katze erzählst..."
+- "Die Tiergeister flüstern mir etwas über diese Verbindung, die du spürst..."
+- "Ich sehe diese Katzenenergie, die du beschreibst, ganz klar..."
+- "Bezüglich deiner Intuition zur Katze, lass mich tiefer erkunden..."
+- "Diese Affinität, die du erwähnst, enthüllt viel von deiner Essenz..."
 
 ${conversationContext}
 
-Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres Tier zu entdecken und damit zu verbinden. Schließe immer deine Lesungen und Orientierungen ab, perfekt an die Sprache des Benutzers angepasst.`;
+Denk dran: ${
+      isFirstMessage
+        ? "Das ist der erste Kontakt, du kannst eine kurze Begrüßung vor der Antwort geben."
+        : "⚠️ DAS IST EIN LAUFENDES GESPRÄCH - NICHT GRÜSSEN, geh direkt zum Inhalt. Der Nutzer weiß schon, wer du bist."
+    }`;
   }
 
-  // Validación de la solicitud para guía de animal interior
   private validateAnimalChatRequest(
     guideData: AnimalGuideData,
     userMessage: string
   ): void {
     if (!guideData) {
       const error: ApiError = new Error(
-        "Daten des spirituellen Führers werden benötigt."
+        "Daten des spirituellen Führers erforderlich"
       );
       error.statusCode = 400;
       error.code = "MISSING_GUIDE_DATA";
@@ -336,7 +530,7 @@ Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres
       typeof userMessage !== "string" ||
       userMessage.trim() === ""
     ) {
-      const error: ApiError = new Error("Benutzernachricht erforderlich.");
+      const error: ApiError = new Error("Benutzernachricht erforderlich");
       error.statusCode = 400;
       error.code = "MISSING_USER_MESSAGE";
       throw error;
@@ -344,7 +538,7 @@ Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres
 
     if (userMessage.length > 1500) {
       const error: ApiError = new Error(
-        "Die Nachricht ist zu lang (maximal 1500 Zeichen)."
+        "Die Nachricht ist zu lang (maximal 1500 Zeichen)"
       );
       error.statusCode = 400;
       error.code = "MESSAGE_TOO_LONG";
@@ -353,10 +547,10 @@ Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres
   }
 
   private handleError(error: any, res: Response): void {
-    console.error("Fehler in AnimalInteriorController:", error);
+    console.error("Fehler im AnimalInteriorController:", error);
 
     let statusCode = 500;
-    let errorMessage = "Interner Serverfehler.";
+    let errorMessage = "Interner Serverfehler";
     let errorCode = "INTERNAL_ERROR";
 
     if (error.statusCode) {
@@ -366,34 +560,25 @@ Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres
     } else if (error.status === 503) {
       statusCode = 503;
       errorMessage =
-        "Der Dienst ist vorübergehend überlastet. Bitte versuche es in ein paar Minuten erneut.";
+        "Der Dienst ist vorübergehend überlastet. Bitte versuch es in ein paar Minuten nochmal.";
       errorCode = "SERVICE_OVERLOADED";
     } else if (
       error.message?.includes("quota") ||
-      error.message?.includes("limit") ||
-      error.message?.includes("Kontingent") ||
-      error.message?.includes("Limit")
+      error.message?.includes("limit")
     ) {
       statusCode = 429;
-      errorMessage = "Abfrage-Limit erreicht. Bitte warten Sie einen Moment.";
+      errorMessage = "Das Anfragelimit wurde erreicht. Bitte warte kurz.";
       errorCode = "QUOTA_EXCEEDED";
-    } else if (
-      error.message?.includes("safety") ||
-      error.message?.includes("Sicherheits")
-    ) {
+    } else if (error.message?.includes("safety")) {
       statusCode = 400;
       errorMessage = "Der Inhalt entspricht nicht den Sicherheitsrichtlinien.";
       errorCode = "SAFETY_FILTER";
-    } else if (
-      error.message?.includes("API key") ||
-      error.message?.includes("GEMINI_API_KEY")
-    ) {
+    } else if (error.message?.includes("API key")) {
       statusCode = 401;
-      errorMessage = "Authentifizierungsfehler mit dem KI-Dienst.";
+      errorMessage = "Authentifizierungsfehler beim KI-Dienst.";
       errorCode = "AUTH_ERROR";
     } else if (
-      error.message?.includes("Todos los modelos de IA no están disponibles") ||
-      error.message?.includes("Alle KI-Modelle sind derzeit nicht verfügbar")
+      error.message?.includes("Alle KI-Modelle sind gerade nicht verfügbar")
     ) {
       statusCode = 503;
       errorMessage = error.message;
@@ -418,13 +603,14 @@ Erinnere dich: Du bist ein spiritueller Führer, der Menschen hilft, ihr inneres
       res.json({
         success: true,
         guide: {
-          name: "Maestra Kiara",
-          title: "Flüsterin der Bestien",
+          name: "Meisterin Kiara",
+          title: "Tierflüsterin",
           specialty:
             "Kommunikation mit Tiergeistern und Entdeckung des inneren Tieres",
           description:
-            "Uralte Schamanin, spezialisiert auf die Verbindung von Seelen mit ihren Führertieren und Totems.",
+            "Uralte Schamanin, spezialisiert darauf, Seelen mit ihren totemischen Krafttieren zu verbinden",
         },
+        freeMessagesLimit: this.FREE_MESSAGES_LIMIT,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

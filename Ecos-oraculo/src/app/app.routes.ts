@@ -15,7 +15,7 @@ export const routes: Routes = [
     loadComponent: () => import('./components/significado-suenos/significado-suenos.component').then(m => m.SignificadoSuenosComponent),
   },
   {
-    path: 'zodiac-information',
+    path: 'sternzeichen-informationen',
     loadComponent: () => import('./components/informacion-zodiaco/informacion-zodiaco.component').then(m => m.InformacionZodiacoComponent),
   },
   {

@@ -11,10 +11,10 @@
       Dein Browser unterstützt keine HTML5-Videos.
     </video>
 
-    <!-- Overlay opcional para mejorar legibilidad -->
+    <!-- Optionales Overlay zur Verbesserung der Lesbarkeit -->
     <div class="video-overlay"></div>
 
-    <!-- Contenido principal -->
+    <!-- Hauptinhalt -->
     <div class="main-content">
       <div class="birth-chart-modal">
         <!-- Header -->
@@ -28,7 +28,7 @@
               />
             </div>
             <div class="interpreter-details">
-              <!-- Primera línea: nombre + icono + título juntos -->
+              <!-- Erste Zeile: Name + Symbol + Titel zusammen -->
               <div class="name-title-row">
                 <h3>Meisterin Emma</h3>
                 <span class="separator-icon">»</span>
@@ -36,7 +36,7 @@
                   Hüterin der Himmlischen Konfigurationen
                 </p>
               </div>
-              <!-- Segunda línea: especialidad debajo EN MAYÚSCULAS -->
+              <!-- Zweite Zeile: Fachgebiet darunter IN GROSSBUCHSTABEN -->
               <p class="interpreter-specialty">
                 SPEZIALISTIN FÜR GEBURTSCHARTEN UND TRANSPERSONALE ASTROLOGIE
               </p>
@@ -58,7 +58,7 @@
           </button>
         </div>
 
-        <!-- Chat Messages -->
+        <!-- Chat-Nachrichten -->
         <div
           class="chat-messages"
           #chatContainer
@@ -103,7 +103,7 @@
             </div>
           </div>
 
-          <!-- Loading indicator -->
+          <!-- Ladeanzeige -->
           <div *ngIf="isLoading" class="loading-message">
             <div class="loading-avatar">
               <span class="avatar-icon">
@@ -120,20 +120,21 @@
                 <span></span>
               </div>
               <span class="loading-text"
-                >Meisterin Astra konsultiert die himmlischen
+                >Meisterin Emma konsultiert die himmlischen
                 Konfigurationen...</span
               >
             </div>
           </div>
         </div>
-        <!-- Input Area -->
+
+        <!-- Eingabebereich -->
         <div class="chat-input-area">
           <div class="input-container">
             <div class="text-input-wrapper">
               <textarea
                 class="message-input"
                 [(ngModel)]="currentMessage"
-                placeholder="Frage über deine Geburtstabelle..."
+                placeholder="Frage über deine Geburtskarte..."
                 (input)="autoResize($event)"
                 (keydown)="onKeyPress($event)"
                 [disabled]="isLoading"
@@ -171,7 +172,7 @@
       </app-recolecta-datos>
     </div>
 
-    <!-- ===== MODAL DE PAGO ===== -->
+    <!-- ===== ZAHLUNGS-MODAL ===== -->
     <div *ngIf="showPaymentModal" class="payment-modal-overlay">
       <div class="payment-modal">
         <div class="payment-header">
@@ -184,11 +185,11 @@
         <div class="payment-content">
           <div class="payment-info">
             <p>Greife auf unbegrenzte Lesungen mit Meisterin Emma zu</p>
-            <p>Entdecke alle Geheimnisse deiner Geburtstabelle</p>
+            <p>Entdecke alle Geheimnisse deiner Geburtskarte</p>
           </div>
 
           <div class="payment-price">
-            <span class="price-amount">4.00€</span>
+            <span class="price-amount">4,00€</span>
             <p class="price-description">
               Vollständiger und unbegrenzter Zugang
             </p>
@@ -204,18 +205,13 @@
               (click)="handlePaymentSubmit()"
               [disabled]="isProcessingPayment"
             >
-              {{ isProcessingPayment ? "Verarbeitung..." : "4.00€ bezahlen" }}
+              {{
+                isProcessingPayment ? "Wird verarbeitet..." : "4,00€ bezahlen"
+              }}
             </button>
           </div>
         </div>
       </div>
     </div>
-    <app-fortune-wheel
-      [isVisible]="showFortuneWheel"
-      [prizes]="birthChartPrizes"
-      (onPrizeWon)="onPrizeWon($event)"
-      (onWheelClosed)="onWheelClosed()"
-    >
-    </app-fortune-wheel>
   </body>
 </html>

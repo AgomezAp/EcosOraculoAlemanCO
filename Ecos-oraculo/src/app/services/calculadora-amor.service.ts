@@ -44,7 +44,11 @@ export interface LoveCalculatorResponse {
   response?: string;
   error?: string;
   code?: string;
-  timestamp: string;
+  timestamp?: string;
+  freeMessagesRemaining?: number; // ✅ NUEVO
+  showPaywall?: boolean; // ✅ NUEVO
+  paywallMessage?: string; // ✅ NUEVO
+  isCompleteResponse?: boolean; // ✅ NUEVO
 }
 
 export interface CompatibilityData {
@@ -54,26 +58,28 @@ export interface CompatibilityData {
   person2BirthDate: string;
 }
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class CalculadoraAmorService {
- private readonly apiUrl = `${environment.apiUrl}`;
-  private conversationHistorySubject = new BehaviorSubject<ConversationMessage[]>([]);
-  private compatibilityDataSubject = new BehaviorSubject<CompatibilityData | null>(null);
+  private readonly apiUrl = `${environment.apiUrl}`;
+  private conversationHistorySubject = new BehaviorSubject<
+    ConversationMessage[]
+  >([]);
+  private compatibilityDataSubject =
+    new BehaviorSubject<CompatibilityData | null>(null);
 
   public conversationHistory$ = this.conversationHistorySubject.asObservable();
   public compatibilityData$ = this.compatibilityDataSubject.asObservable();
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   /**
    * Obtiene información del experto en amor
    */
   getLoveExpertInfo(): Observable<LoveExpertInfo> {
-    return this.http.get<LoveExpertInfo>(`${this.apiUrl}info`)
-      .pipe(
-        catchError(this.handleError)
-      );
+    return this.http
+      .get<LoveExpertInfo>(`${this.apiUrl}info`)
+      .pipe(catchError(this.handleError));
   }
 
   /**
@@ -84,27 +90,35 @@ export class CalculadoraAmorService {
     person1Name?: string,
     person1BirthDate?: string,
     person2Name?: string,
-    person2BirthDate?: string
+    person2BirthDate?: string,
+    conversationHistory?: Array<{
+      role: 'user' | 'love_expert';
+      message: string;
+    }>,
+    messageCount?: number, // ✅ NUEVO
+    isPremiumUser?: boolean // ✅ NUEVO
   ): Observable<LoveCalculatorResponse> {
     const currentHistory = this.conversationHistorySubject.value;
-    
+
     const requestData: LoveCalculatorRequest = {
       loveCalculatorData: {
-        name: "Maestra Valentina",
-        specialty: "Compatibilidad numerológica y análisis de relaciones",
-        experience: "Décadas analizando la compatibilidad a través de los números del amor"
+        name: 'Maestra Valentina',
+        specialty: 'Compatibilidad numerológica y análisis de relaciones',
+        experience:
+          'Décadas analizando la compatibilidad a través de los números del amor',
       },
       userMessage,
       person1Name,
       person1BirthDate,
       person2Name,
       person2BirthDate,
-      conversationHistory: currentHistory
+      conversationHistory: currentHistory,
     };
 
-    return this.http.post<LoveCalculatorResponse>(`${this.apiUrl}chat`, requestData)
+    return this.http
+      .post<LoveCalculatorResponse>(`${this.apiUrl}chat`, requestData)
       .pipe(
-        map((response:any) => {
+        map((response: any) => {
           if (response.success && response.response) {
             // Agregar mensajes a la conversación
             this.addMessageToHistory('user', userMessage);
@@ -119,12 +133,14 @@ export class CalculadoraAmorService {
   /**
    * Calcula la compatibilidad entre dos personas
    */
-  calculateCompatibility(compatibilityData: CompatibilityData): Observable<LoveCalculatorResponse> {
+  calculateCompatibility(
+    compatibilityData: CompatibilityData
+  ): Observable<LoveCalculatorResponse> {
     // Guardar los datos de compatibilidad
     this.setCompatibilityData(compatibilityData);
-    
+
     const message = `Quiero conocer la compatibilidad entre ${compatibilityData.person1Name} y ${compatibilityData.person2Name}. Por favor, analiza nuestra compatibilidad numerológica.`;
-    
+
     return this.chatWithLoveExpert(
       message,
       compatibilityData.person1Name,
@@ -139,7 +155,7 @@ export class CalculadoraAmorService {
    */
   getRelationshipAdvice(question: string): Observable<LoveCalculatorResponse> {
     const compatibilityData = this.compatibilityDataSubject.value;
-    
+
     return this.chatWithLoveExpert(
       question,
       compatibilityData?.person1Name,
@@ -152,14 +168,17 @@ export class CalculadoraAmorService {
   /**
    * Agrega un mensaje al historial de conversación
    */
-  private addMessageToHistory(role: 'user' | 'love_expert', message: string): void {
+  private addMessageToHistory(
+    role: 'user' | 'love_expert',
+    message: string
+  ): void {
     const currentHistory = this.conversationHistorySubject.value;
     const newMessage: ConversationMessage = {
       role,
       message,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    
+
     const updatedHistory = [...currentHistory, newMessage];
     this.conversationHistorySubject.next(updatedHistory);
   }
@@ -212,8 +231,12 @@ export class CalculadoraAmorService {
    */
   hasCompleteCompatibilityData(): boolean {
     const data = this.compatibilityDataSubject.value;
-    return !!(data?.person1Name && data?.person1BirthDate && 
-              data?.person2Name && data?.person2BirthDate);
+    return !!(
+      data?.person1Name &&
+      data?.person1BirthDate &&
+      data?.person2Name &&
+      data?.person2BirthDate
+    );
   }
 
   /**
@@ -272,6 +295,7 @@ export class CalculadoraAmorService {
    * Maneja errores HTTP
    */
   private handleError = (error: HttpErrorResponse): Observable<never> => {
+    console.error('Error en CalculadoraAmorService:', error);
 
     let errorMessage = 'Error desconocido';
     let errorCode = 'UNKNOWN_ERROR';
@@ -280,10 +304,12 @@ export class CalculadoraAmorService {
       errorMessage = error.error.error;
       errorCode = error.error.code || 'API_ERROR';
     } else if (error.status === 0) {
-      errorMessage = 'No se pudo conectar con el servidor. Verifica tu conexión a internet.';
+      errorMessage =
+        'No se pudo conectar con el servidor. Verifica tu conexión a internet.';
       errorCode = 'CONNECTION_ERROR';
     } else if (error.status >= 400 && error.status < 500) {
-      errorMessage = 'Error en la solicitud. Por favor, verifica los datos enviados.';
+      errorMessage =
+        'Error en la solicitud. Por favor, verifica los datos enviados.';
       errorCode = 'CLIENT_ERROR';
     } else if (error.status >= 500) {
       errorMessage = 'Error del servidor. Por favor, intenta más tarde.';
@@ -293,7 +319,7 @@ export class CalculadoraAmorService {
     return throwError(() => ({
       message: errorMessage,
       code: errorCode,
-      status: error.status
+      status: error.status,
     }));
   };
 }
